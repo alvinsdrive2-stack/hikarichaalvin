@@ -1,12 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../lib/generated/prisma"
 }
 
 datasource db {
@@ -33,6 +26,51 @@ model Account {
   @@unique([provider, providerAccountId])
 }
 
+model Activity {
+  id          String      @id @default(cuid())
+  userId      String
+  type        ActivityType
+  title       String
+  description String?     @db.Text
+  metadata    Json?       // For storing additional data
+  createdAt   DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProfileBorder {
+  id          String   @id @default(cuid())
+  userId      String
+  borderName  String   // "default", "gold", "silver", "bronze", "crystal", etc.
+  imageUrl    String   // URL to PNG border image
+  isUnlocked  Boolean  @default(false)
+  unlockedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, borderName])
+}
+
+model Achievement {
+  id            String         @id @default(cuid())
+  userId        String
+  type          AchievementType
+  title         String
+  description   String?        @db.Text
+  targetValue   Int            // Target value to achieve (e.g., 10 posts)
+  currentValue  Int            @default(0) // Current progress
+  isCompleted   Boolean        @default(false)
+  completedAt   DateTime?
+  rewards       Json?          // Rewards data (e.g., border unlocks, points)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+}
+
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
@@ -42,18 +80,25 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  role          UserRole  @default(USER)
+  id              String    @id @default(cuid())
+  name            String?
+  email           String    @unique
+  emailVerified   DateTime?
+  password        String?
+  image           String?
+  bio             String?   @db.Text
+  location        String?
+  selectedBorder  String    @default("default")
+  points          Int       @default(0) // User points for unlocking content
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  role            UserRole  @default(USER)
 
   accounts Account[]
   sessions Session[]
+  profileBorders ProfileBorder[]
+  activities Activity[]
+  achievements Achievement[]
 }
 
 model VerificationToken {
@@ -62,6 +107,29 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+enum ActivityType {
+  FORUM_POST
+  FORUM_COMMENT
+  RECIPE_CREATED
+  RECIPE_LIKED
+  PURCHASE
+  PROFILE_UPDATE
+  BADGE_EARNED
+}
+
+enum AchievementType {
+  FIRST_FORUM_POST      // Unlock bronze border
+  FORUM_REGULAR         // 10 forum posts
+  RECIPE_CREATOR        // 5 recipes created
+  SOCIAL_BUTTERFLY      // 20 comments
+  EXPLORER              // Visit all pages
+  EARLY_ADOPTER         // Registered in first week
+  PURCHASE_MASTER       // 5 purchases
+  BORDER_COLLECTOR      // Unlock all borders
+  POINTS_COLLECTOR      // 1000 points
+  DAILY_VISITOR         // 7 day streak
 }
 
 enum UserRole {

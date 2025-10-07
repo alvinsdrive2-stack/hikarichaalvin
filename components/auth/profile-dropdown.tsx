@@ -1,15 +1,79 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { BorderPreview } from "@/components/ui/border-preview"
 import { User, LogOut, ShoppingBag } from "lucide-react"
 
 export function ProfileDropdown() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
+  const [userBorder, setUserBorder] = useState<any>(null)
+
+  // Fetch user border data
+  useEffect(() => {
+    if (session?.user) {
+      fetchUserBorder()
+    }
+  }, [session])
+
+  const fetchUserBorder = async () => {
+    try {
+      const response = await fetch("/api/profile")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.user.selectedBorder) {
+          // Base border options
+          const baseBorderOptions = [
+            {
+              id: "default",
+              name: "Default",
+              image: "/borders/default.svg",
+              rarity: "common" as const
+            },
+            {
+              id: "bronze",
+              name: "Bronze",
+              image: "/borders/bronze.svg",
+              rarity: "common" as const
+            },
+            {
+              id: "silver",
+              name: "Silver",
+              image: "/borders/silver.svg",
+              rarity: "rare" as const
+            },
+            {
+              id: "gold",
+              name: "Gold",
+              image: "/borders/gold.svg",
+              rarity: "epic" as const
+            },
+            {
+              id: "crystal",
+              name: "Crystal",
+              image: "/borders/crystal.svg",
+              rarity: "epic" as const
+            },
+            {
+              id: "diamond",
+              name: "Diamond",
+              image: "/borders/diamond.svg",
+              rarity: "legendary" as const
+            },
+          ]
+
+          const border = baseBorderOptions.find(b => b.id === data.user.selectedBorder)
+          setUserBorder(border || baseBorderOptions[0])
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user border:", error)
+    }
+  }
 
   if (!session) {
     return null
@@ -55,19 +119,30 @@ export function ProfileDropdown() {
 
   return (
     <div className="relative">
-      {/* Avatar Button */}
+      {/* Avatar Button with Border */}
       <Button
         variant="ghost"
-        className="relative h-10 w-10 rounded-full hover:bg-gray-100 transition-colors"
+        className="relative h-12 w-12 rounded-full hover:bg-gray-100 transition-colors p-0 items-center justify-center"
         aria-label="User menu"
         onClick={handleButtonClick}
       >
-        <Avatar className="h-10 w-10">
-          <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
-          <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-            {userInitials}
-          </AvatarFallback>
-        </Avatar>
+        {userBorder ? (
+          <BorderPreview
+            border={userBorder}
+            size="lg"
+            avatarSrc={session.user?.image || ""}
+            avatarName={session.user?.name || ""}
+            showLabel={false}
+            showLockStatus={false}
+          />
+        ) : (
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
+            <AvatarFallback className="bg-primary text-primary-foreground font-medium">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
+        )}
       </Button>
 
       {/* Dropdown Menu */}
@@ -77,18 +152,32 @@ export function ProfileDropdown() {
             className="absolute right-0 top-12 w-56 bg-popover border border-border rounded-md shadow-lg z-50"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* User Info Header */}
+            {/* User Info Header with Border */}
             <div className="p-3 border-b border-border">
               <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
-                  <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-                    {userInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                  <p className="font-medium text-sm">{session.user?.name}</p>
-                  <p className="text-xs text-muted-foreground">{session.user?.email}</p>
+                {userBorder ? (
+                  <BorderPreview
+                    border={userBorder}
+                    size="md"
+                    avatarSrc={session.user?.image || ""}
+                    avatarName={session.user?.name || ""}
+                    showLabel={false}
+                    showLockStatus={false}
+                  />
+                ) : (
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
+                    <AvatarFallback className="bg-primary text-primary-foreground font-medium">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="flex flex-col flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{session.user?.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{session.user?.email}</p>
+                  {userBorder && (
+                    <p className="text-xs text-muted-foreground">Border: {userBorder.name}</p>
+                  )}
                 </div>
               </div>
             </div>
