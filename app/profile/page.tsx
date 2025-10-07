@@ -63,7 +63,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [activities, setActivities] = useState<any[]>([])
-  const [unlockedBorders, setUnlockedBorders] = useState<string[]>([])
+  const [borderOptions, setBorderOptions] = useState<any[]>([])
   const [userPoints, setUserPoints] = useState(0)
   const [achievements, setAchievements] = useState<any[]>([])
 
@@ -75,52 +75,6 @@ export default function ProfilePage() {
     selectedBorder: "default"
   })
 
-  // Base border options with svg images
-  const baseBorderOptions = [
-    {
-      id: "default",
-      name: "Default",
-      image: "/borders/default.svg",
-      rarity: "common" as const
-    },
-    {
-      id: "bronze",
-      name: "Bronze",
-      image: "/borders/bronze.svg",
-      rarity: "common" as const
-    },
-    {
-      id: "silver",
-      name: "Silver",
-      image: "/borders/silver.svg",
-      rarity: "rare" as const
-    },
-    {
-      id: "gold",
-      name: "Gold",
-      image: "/borders/gold.svg",
-      rarity: "epic" as const
-    },
-    {
-      id: "crystal",
-      name: "Crystal",
-      image: "/borders/crystal.svg",
-      rarity: "epic" as const
-    },
-    {
-      id: "diamond",
-      name: "Diamond",
-      image: "/borders/diamond.svg",
-      rarity: "legendary" as const
-    },
-  ]
-
-  // Update border options with unlock status from database
-  const borderOptions = baseBorderOptions.map(border => ({
-    ...border,
-    unlocked: unlockedBorders.includes(border.id) || border.id === "default" // Default is always unlocked
-  }))
-
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/login")
@@ -131,7 +85,8 @@ export default function ProfilePage() {
     if (session?.user) {
       fetchUserProfile()
       fetchUserActivities()
-      fetchUserBorders()
+      fetchBorderOptions()
+      fetchUserPoints()
       fetchUserAchievements()
     }
   }, [session])
@@ -165,15 +120,27 @@ export default function ProfilePage() {
     }
   }
 
-  const fetchUserBorders = async () => {
+  const fetchBorderOptions = async () => {
     try {
       const response = await fetch("/api/borders")
       if (response.ok) {
         const data = await response.json()
-        setUnlockedBorders(data.borders.map((b: any) => b.borderName) || [])
+        setBorderOptions(data.data || [])
       }
     } catch (error) {
       console.error("Gagal memuat borders:", error)
+    }
+  }
+
+  const fetchUserPoints = async () => {
+    try {
+      const response = await fetch("/api/points")
+      if (response.ok) {
+        const data = await response.json()
+        setUserPoints(data.data.points || 0)
+      }
+    } catch (error) {
+      console.error("Gagal memuat poin:", error)
     }
   }
 
@@ -183,7 +150,6 @@ export default function ProfilePage() {
       if (response.ok) {
         const data = await response.json()
         setAchievements(data.achievements || [])
-        setUserPoints(data.userPoints || 0)
       }
     } catch (error) {
       console.error("Gagal memuat achievements:", error)
@@ -257,12 +223,75 @@ export default function ProfilePage() {
     }
   }
 
-  const handleBorderSelect = (borderId: string) => {
+  const handleBorderSelect = async (borderId: string) => {
     const border = borderOptions.find(b => b.id === borderId)
+
+    if (!border) {
+      toast.error("Border tidak ditemukan")
+      return
+    }
+
     if (border?.unlocked) {
-      setFormData(prev => ({ ...prev, selectedBorder: borderId }))
+      // Save border selection to database
+      try {
+        const response = await fetch("/api/borders/select", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ borderId })
+        })
+
+        if (response.ok) {
+          setFormData(prev => ({ ...prev, selectedBorder: borderId }))
+          toast.success(`Border ${border.name} berhasil dipilih!`)
+        } else {
+          const errorData = await response.json()
+          toast.error(errorData.error || "Gagal memilih border")
+        }
+      } catch (error) {
+        console.error("Error selecting border:", error)
+        toast.error("Terjadi kesalahan saat memilih border")
+      }
     } else {
-      toast.error("Border ini belum terbuka! Raih lebih banyak poin untuk membukanya.")
+      // Show purchase dialog if border has a price
+      if (border.price) {
+        if (userPoints >= border.price) {
+          if (confirm(`Beli border ${border.name} seharga ${border.price} poin?`)) {
+            await purchaseBorder(borderId)
+          }
+        } else {
+          toast.error(`Poin tidak cukup! Butuh ${border.price} poin, Anda punya ${userPoints} poin.`)
+        }
+      } else {
+        toast.error("Border ini harus dibuka melalui achievement!")
+      }
+    }
+  }
+
+  const purchaseBorder = async (borderId: string) => {
+    try {
+      const response = await fetch("/api/borders/purchase", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ borderId })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast.success(data.message)
+        // Refresh border options and user points
+        await fetchBorderOptions()
+        await fetchUserPoints()
+      } else {
+        toast.error(data.error || "Gagal membeli border")
+      }
+    } catch (error) {
+      console.error("Error purchasing border:", error)
+      toast.error("Terjadi kesalahan saat membeli border")
     }
   }
 

@@ -1,5 +1,6 @@
-import { db } from "./prisma"
-import { AchievementType } from "@prisma/client"
+import { prisma } from "./prisma"
+import { AchievementType, BorderRarity } from "@prisma/client"
+import { borderService } from "./border-service"
 
 export interface AchievementConfig {
   type: AchievementType
@@ -21,7 +22,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 1,
     rewards: {
       points: 10,
-      borderUnlocks: ["bronze"]
+      borderUnlocks: ["Bronze"]
     }
   },
   {
@@ -31,7 +32,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 10,
     rewards: {
       points: 50,
-      borderUnlocks: ["silver"]
+      borderUnlocks: ["Silver"]
     }
   },
   {
@@ -41,7 +42,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 5,
     rewards: {
       points: 30,
-      borderUnlocks: ["silver"]
+      borderUnlocks: ["Gold"]
     }
   },
   {
@@ -51,7 +52,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 20,
     rewards: {
       points: 40,
-      borderUnlocks: ["silver"]
+      borderUnlocks: ["Crystal"]
     }
   },
   {
@@ -61,7 +62,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 1,
     rewards: {
       points: 25,
-      borderUnlocks: ["bronze"]
+      borderUnlocks: ["Bronze"]
     }
   },
   {
@@ -71,7 +72,17 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 5,
     rewards: {
       points: 75,
-      borderUnlocks: ["gold"]
+      borderUnlocks: ["Gold"]
+    }
+  },
+  {
+    type: "BORDER_COLLECTOR",
+    title: "Border Collector",
+    description: "Kumpulkan semua border",
+    targetValue: 6,
+    rewards: {
+      points: 200,
+      borderUnlocks: ["Diamond"]
     }
   },
   {
@@ -81,7 +92,57 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     targetValue: 1000,
     rewards: {
       points: 100,
-      borderUnlocks: ["diamond"]
+      borderUnlocks: ["Diamond"]
+    }
+  },
+  {
+    type: "DAILY_VISITOR",
+    title: "Daily Visitor",
+    description: "Login 7 hari berturut-turut",
+    targetValue: 7,
+    rewards: {
+      points: 50,
+      borderUnlocks: ["Silver"]
+    }
+  },
+  {
+    type: "RECIPE_MASTER",
+    title: "Recipe Master",
+    description: "Buat 25 resep",
+    targetValue: 25,
+    rewards: {
+      points: 150,
+      borderUnlocks: ["Crystal"]
+    }
+  },
+  {
+    type: "FORUM_EXPERT",
+    title: "Forum Expert",
+    description: "Buat 100 postingan forum",
+    targetValue: 100,
+    rewards: {
+      points: 300,
+      borderUnlocks: ["Diamond"]
+    }
+  },
+  {
+    type: "COMMENTATOR_PRO",
+    title: "Commentator Pro",
+    description: "Buat 100 komentar",
+    targetValue: 100,
+    rewards: {
+      points: 200,
+      borderUnlocks: ["Crystal"]
+    }
+  },
+  {
+    type: "ACTIVE_MEMBER",
+    title: "Active Member",
+    description: "Aktif selama 30 hari",
+    targetValue: 30,
+    rewards: {
+      points: 100,
+      borderUnlocks: ["Gold"]
     }
   }
 ]
@@ -89,7 +150,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
 export async function initializeAchievementsForUser(userId: string) {
   const achievements = await Promise.all(
     ACHIEVEMENTS_CONFIG.map(async (config) => {
-      return await db.achievement.upsert({
+      return await prisma.achievement.upsert({
         where: {
           userId_type: {
             userId,
@@ -122,7 +183,7 @@ export async function updateAchievementProgress(
   const config = ACHIEVEMENTS_CONFIG.find(a => a.type === type)
   if (!config) return null
 
-  const achievement = await db.achievement.findUnique({
+  const achievement = await prisma.achievement.findUnique({
     where: {
       userId_type: {
         userId,
@@ -142,7 +203,7 @@ export async function updateAchievementProgress(
   const newCurrentValue = Math.min(achievement.currentValue + increment, config.targetValue)
   const isCompleted = newCurrentValue >= config.targetValue
 
-  const updatedAchievement = await db.achievement.update({
+  const updatedAchievement = await prisma.achievement.update({
     where: {
       userId_type: {
         userId,
@@ -161,7 +222,7 @@ export async function updateAchievementProgress(
     await grantAchievementRewards(userId, config)
 
     // Log activity
-    await db.activity.create({
+    await prisma.activity.create({
       data: {
         userId,
         type: "BADGE_EARNED",
@@ -175,42 +236,33 @@ export async function updateAchievementProgress(
 }
 
 export async function grantAchievementRewards(userId: string, config: AchievementConfig) {
-  // Grant points
+  // Grant points using border service
   if (config.rewards.points) {
-    await db.user.update({
-      where: { id: userId },
-      data: {
-        points: {
-          increment: config.rewards.points
-        }
+    await borderService.addPoints({
+      userId,
+      type: 'EARNED',
+      amount: config.rewards.points,
+      description: `Achievement reward: ${config.title}`,
+      metadata: {
+        achievementType: config.type,
+        achievementTitle: config.title
       }
     })
   }
 
-  // Unlock borders
+  // Unlock borders using border service
   if (config.rewards.borderUnlocks) {
     await Promise.all(
-      config.rewards.borderUnlocks.map(borderName =>
-        db.profileBorder.upsert({
-          where: {
-            userId_borderName: {
-              userId,
-              borderName
-            }
-          },
-          update: {
-            isUnlocked: true,
-            unlockedAt: new Date()
-          },
-          create: {
-            userId,
-            borderName,
-            imageUrl: `/borders/${borderName}.svg`,
-            isUnlocked: true,
-            unlockedAt: new Date()
-          }
+      config.rewards.borderUnlocks.map(async (borderName) => {
+        // Find the border in database
+        const border = await prisma.border.findUnique({
+          where: { name: borderName }
         })
-      )
+
+        if (border) {
+          await borderService.unlockBorderViaAchievement(userId, border.id, config.type)
+        }
+      })
     )
   }
 
@@ -221,41 +273,44 @@ export async function grantAchievementRewards(userId: string, config: Achievemen
 }
 
 export async function getUserAchievements(userId: string) {
-  return await db.achievement.findMany({
+  return await prisma.achievement.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' }
   })
 }
 
 export async function getUserUnlockedBorders(userId: string) {
-  const unlockedBorders = await db.profileBorder.findMany({
-    where: {
-      userId,
-      isUnlocked: true
-    },
-    orderBy: { unlockedAt: 'asc' }
-  })
+  // Use border service instead of old ProfileBorder model
+  const borders = await borderService.getAllBordersWithUnlockStatus(userId)
 
-  // Always include default border
-  const hasDefault = unlockedBorders.some(b => b.borderName === "default")
-  if (!hasDefault) {
-    await db.profileBorder.upsert({
-      where: {
-        userId_borderName: {
-          userId,
-          borderName: "default"
-        }
-      },
-      update: {},
-      create: {
-        userId,
-        borderName: "default",
-        imageUrl: "/borders/default.svg",
-        isUnlocked: true,
-        unlockedAt: new Date()
-      }
-    })
+  // Return only unlocked borders
+  return borders.filter(border => border.unlocked)
+}
+
+export async function trackActivity(userId: string, activityType: string, increment: number = 1) {
+  // Map activity types to achievement types
+  const activityToAchievementMap: { [key: string]: AchievementType } = {
+    'FORUM_POST': 'FORUM_REGULAR',
+    'FORUM_COMMENT': 'SOCIAL_BUTTERFLY',
+    'RECIPE_CREATED': 'RECIPE_CREATOR',
+    'PROFILE_UPDATE': 'ACTIVE_MEMBER',
+    'PURCHASE': 'PURCHASE_MASTER'
   }
 
-  return unlockedBorders
+  const achievementType = activityToAchievementMap[activityType]
+  if (achievementType) {
+    await updateAchievementProgress(userId, achievementType, increment)
+  }
+
+  // Track border collector achievement
+  if (activityType === 'BADGE_EARNED') {
+    const userBorders = await getUserUnlockedBorders(userId)
+    await updateAchievementProgress(userId, 'BORDER_COLLECTOR', userBorders.length)
+  }
+
+  // Track points collector achievement
+  if (activityType === 'EARNED') {
+    const userPoints = await borderService.getUserPoints(userId)
+    await updateAchievementProgress(userId, 'POINTS_COLLECTOR', userPoints)
+  }
 }

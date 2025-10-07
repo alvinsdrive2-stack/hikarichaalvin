@@ -38,19 +38,6 @@ model Activity {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model ProfileBorder {
-  id          String   @id @default(cuid())
-  userId      String
-  borderName  String   // "default", "gold", "silver", "bronze", "crystal", etc.
-  imageUrl    String   // URL to PNG border image
-  isUnlocked  Boolean  @default(false)
-  unlockedAt  DateTime?
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, borderName])
-}
 
 model Achievement {
   id            String         @id @default(cuid())
@@ -69,6 +56,47 @@ model Achievement {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, type])
+}
+
+model Border {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  imageUrl    String   // URL to PNG/SVG border image
+  price       Int?     // Price in points if available for purchase
+  rarity      BorderRarity
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  borderUnlocks BorderUnlock[]
+}
+
+model BorderUnlock {
+  id          String   @id @default(cuid())
+  userId      String
+  borderId    String
+  unlockType  UnlockType // ACHIEVEMENT, PURCHASE, ADMIN
+  unlockedAt  DateTime @default(now())
+  pricePaid   Int?     // Points spent if purchased
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  border Border @relation(fields: [borderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, borderId])
+}
+
+model PointTransaction {
+  id          String      @id @default(cuid())
+  userId      String
+  type        PointType
+  amount      Int
+  description String?     @db.Text
+  metadata    Json?       // Additional data
+  createdAt   DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Session {
@@ -96,9 +124,10 @@ model User {
 
   accounts Account[]
   sessions Session[]
-  profileBorders ProfileBorder[]
   activities Activity[]
   achievements Achievement[]
+  borderUnlocks BorderUnlock[]
+  pointTransactions PointTransaction[]
 }
 
 model VerificationToken {
@@ -130,9 +159,33 @@ enum AchievementType {
   BORDER_COLLECTOR      // Unlock all borders
   POINTS_COLLECTOR      // 1000 points
   DAILY_VISITOR         // 7 day streak
+  RECIPE_MASTER         // 25 recipes created
+  FORUM_EXPERT          // 100 forum posts
+  COMMENTATOR_PRO        // 100 comments
+  ACTIVE_MEMBER         // 30 days active streak
 }
 
 enum UserRole {
   USER
   ADMIN
+}
+
+enum BorderRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum UnlockType {
+  ACHIEVEMENT
+  PURCHASE
+  ADMIN
+}
+
+enum PointType {
+  EARNED        // Points earned from activities
+  SPENT         // Points spent on purchases
+  ADMIN_GIVEN   // Points given by admin
+  REFUND        // Points refunded
 }
