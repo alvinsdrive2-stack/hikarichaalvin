@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2 } from "lucide-react"
+import ReCAPTCHA from "react-google-recaptcha"
 
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [captchaValue, setCaptchaValue] = useState<string | null>(null)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -35,6 +37,12 @@ export default function RegisterPage() {
       return
     }
 
+    if (!captchaValue) {
+      toast.error("Silakan lengkapi reCAPTCHA")
+      setIsLoading(false)
+      return
+    }
+
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
@@ -45,6 +53,7 @@ export default function RegisterPage() {
           name,
           email,
           password,
+          captchaToken: captchaValue,
         }),
       })
 
@@ -54,6 +63,7 @@ export default function RegisterPage() {
         toast.error(data.error || "Registrasi gagal")
       } else {
         toast.success("Registrasi berhasil! Silakan login.")
+        setCaptchaValue(null) // Reset captcha
         router.push("/auth/login")
       }
     } catch (error) {
@@ -117,7 +127,21 @@ export default function RegisterPage() {
             disabled={isLoading}
           />
         </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <div className="space-y-2">
+          <Label>Verifikasi Keamanan</Label>
+          <div className="flex justify-center">
+            <ReCAPTCHA
+              sitekey="6LfLIeErAAAAACRRcYQYvLq584DjbTrNLOvoXreg"
+              onChange={(value) => setCaptchaValue(value)}
+              onExpired={() => setCaptchaValue(null)}
+            />
+          </div>
+        </div>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || !captchaValue}
+        >
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

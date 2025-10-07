@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2 } from "lucide-react"
+import ReCAPTCHA from "react-google-recaptcha"
 
 interface AuthModalProps {
   isOpen: boolean
@@ -17,6 +18,7 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [captchaValue, setCaptchaValue] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -64,6 +66,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return
     }
 
+    if (!captchaValue) {
+      toast.error("Silakan lengkapi reCAPTCHA")
+      setIsLoading(false)
+      return
+    }
+
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
@@ -74,6 +82,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           name,
           email,
           password,
+          captchaToken: captchaValue,
         }),
       })
 
@@ -83,6 +92,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         toast.error(data.error || "Registrasi gagal")
       } else {
         toast.success("Registrasi berhasil! Silakan login.")
+        setCaptchaValue(null) // Reset captcha
         setTimeout(() => {
           // Switch to login tab
           const loginTab = document.querySelector('[data-value="login"]') as HTMLElement
@@ -196,18 +206,28 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     minLength={6}
                   />
                 </div>
-                  <Button
+                <div className="space-y-2">
+                  <Label>Verifikasi Keamanan</Label>
+                  <div className="flex justify-center">
+                    <ReCAPTCHA
+                      sitekey="6LfLIeErAAAAACRRcYQYvLq584DjbTrNLOvoXreg"
+                      onChange={(value) => setCaptchaValue(value)}
+                      onExpired={() => setCaptchaValue(null)}
+                    />
+                  </div>
+                </div>
+                <Button
                   type="submit"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={isLoading || !captchaValue}
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
+                      Mendaftar...
                     </>
                   ) : (
-                    "Register"
+                    "Daftar"
                   )}
                 </Button>
               </form>
