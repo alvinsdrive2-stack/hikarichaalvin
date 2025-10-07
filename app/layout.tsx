@@ -7,6 +7,8 @@ import "./globals.css"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { CartProvider } from "@/components/cart-provider"
+import { SessionProviderWrapper } from "@/components/providers/session-provider"
+import { Toaster } from "@/components/ui/sonner"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
@@ -45,14 +47,17 @@ export default function RootLayout({
           Lewati ke konten utama
         </a>
         <Suspense fallback={<div>Loading...</div>}>
-          <CartProvider>
-            <SiteHeader />
-            <main id="main" className="min-h-[60vh]">
-              {children}
-            </main>
-            <SiteFooter />
-          </CartProvider>
+          <SessionProviderWrapper>
+            <CartProvider>
+              <SiteHeader />
+              <main id="main" className="min-h-[60vh]">
+                {children}
+              </main>
+              <SiteFooter />
+            </CartProvider>
+          </SessionProviderWrapper>
         </Suspense>
+        <Toaster />
         <Analytics />
       </body>
     </html>

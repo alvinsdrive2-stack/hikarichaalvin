@@ -2,13 +2,18 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { ShoppingCart } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { ShoppingCart, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
 import { cn } from "@/lib/utils"
+import { AuthModal } from "@/components/auth/auth-modal"
+import { ProfileDropdown } from "@/components/auth/profile-dropdown"
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const { data: session } = useSession()
   const { count } = useCart()
 
   return (
@@ -40,27 +45,28 @@ export function SiteHeader() {
               Marketplace
             </Link>
           </li>
-          <li>
-            <Link href="/profile" className="hover:underline">
-              Profil
-            </Link>
-          </li>
-          <li>
-            <Link href="/auth/login" className="hover:underline">
-              Masuk
-            </Link>
-          </li>
-          <li>
-            <Link href="/auth/register" className="hover:underline">
-              Daftar
-            </Link>
-          </li>
-          <li>
+            <li>
             <Link href="/marketplace#cart" className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md border")}>
               <ShoppingCart className="size-4" />
               <span className="sr-only">{"Jumlah item di keranjang"}</span>
               <span aria-live="polite">{count}</span>
             </Link>
+          </li>
+          <li>
+            {session ? (
+              <ProfileDropdown />
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAuthModal(true)}
+                className="inline-flex items-center gap-2"
+              >
+                <User className="size-4" />
+                <span className="hidden sm:inline">Login/Register</span>
+                <span className="sm:hidden">Login</span>
+              </Button>
+            )}
           </li>
         </ul>
       </nav>
@@ -78,28 +84,36 @@ export function SiteHeader() {
                 Marketplace
               </Link>
             </li>
-            <li>
-              <Link href="/profile" onClick={() => setOpen(false)}>
-                Profil
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <Link href="/auth/login" onClick={() => setOpen(false)}>
-                <Button variant="outline" size="sm">
-                  Masuk
-                </Button>
-              </Link>
-              <Link href="/auth/register" onClick={() => setOpen(false)}>
-                <Button size="sm">Daftar</Button>
-              </Link>
-            </li>
-            <li className="flex items-center gap-2">
+              <li className="flex items-center gap-2">
               <ShoppingCart className="size-4" />
               <span aria-live="polite">Keranjang: {count}</span>
+            </li>
+            <li>
+              {session ? (
+                <ProfileDropdown />
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowAuthModal(true)
+                    setOpen(false)
+                  }}
+                  className="inline-flex items-center gap-2"
+                >
+                  <User className="size-4" />
+                  Login/Register
+                </Button>
+              )}
             </li>
           </ul>
         </div>
       )}
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </header>
   )
 }
