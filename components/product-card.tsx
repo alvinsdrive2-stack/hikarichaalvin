@@ -16,7 +16,7 @@ export function ProductCard({ id, name, price, imageAlt }: Props) {
   return (
     <div className="rounded-lg border overflow-hidden bg-card">
       <Image
-        src={`/matcha-.jpg?height=180&width=320&query=matcha%20${encodeURIComponent(name)}`}
+        src={`/placeholder.jpg?height=180&width=320`}
         alt={imageAlt || `Gambar produk ${name}`}
         width={320}
         height={180}

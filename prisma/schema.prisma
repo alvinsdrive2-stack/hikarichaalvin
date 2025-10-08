@@ -7,8 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Account {
-  id                String  @id @default(cuid())
+model account {
+  id                String  @id
   userId            String
   type              String
   provider          String
@@ -20,125 +20,142 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
+  user              user    @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Account_userId_fkey")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId], map: "Account_provider_providerAccountId_key")
+  @@index([userId], map: "Account_userId_fkey")
 }
 
-model Activity {
-  id          String      @id @default(cuid())
+model achievement {
+  id           String           @id
+  userId       String
+  type         achievement_type
+  title        String
+  description  String?          @db.Text
+  targetValue  Int
+  currentValue Int              @default(0)
+  isCompleted  Boolean          @default(false)
+  completedAt  DateTime?
+  rewards      String?          @db.LongText
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime
+  user         user             @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Achievement_userId_fkey")
+
+  @@unique([userId, type], map: "Achievement_userId_type_key")
+}
+
+model activity {
+  id          String        @id
   userId      String
-  type        ActivityType
+  type        activity_type
   title       String
-  description String?     @db.Text
-  metadata    Json?       // For storing additional data
-  createdAt   DateTime    @default(now())
+  description String?       @db.Text
+  metadata    String?       @db.LongText
+  createdAt   DateTime      @default(now())
+  user        user          @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Activity_userId_fkey")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId], map: "Activity_userId_fkey")
 }
 
-
-model Achievement {
-  id            String         @id @default(cuid())
-  userId        String
-  type          AchievementType
-  title         String
-  description   String?        @db.Text
-  targetValue   Int            // Target value to achieve (e.g., 10 posts)
-  currentValue  Int            @default(0) // Current progress
-  isCompleted   Boolean        @default(false)
-  completedAt   DateTime?
-  rewards       Json?          // Rewards data (e.g., border unlocks, points)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, type])
+model border {
+  id           String         @id
+  name         String
+  description  String?        @db.Text
+  imageUrl     String
+  price        Int?
+  rarity       border_rarity
+  isActive     Boolean        @default(true)
+  sortOrder    Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  borderunlock borderunlock[]
 }
 
-model Border {
-  id          String   @id @default(cuid())
-  name        String
-  description String?  @db.Text
-  imageUrl    String   // URL to PNG/SVG border image
-  price       Int?     // Price in points if available for purchase
-  rarity      BorderRarity
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model borderunlock {
+  id         String                  @id
+  userId     String
+  borderId   String
+  unlockType borderunlock_unlockType
+  unlockedAt DateTime                @default(now())
+  pricePaid  Int?
+  border     border                  @relation(fields: [borderId], references: [id], onDelete: Cascade, map: "BorderUnlock_borderId_fkey")
+  user       user                    @relation(fields: [userId], references: [id], onDelete: Cascade, map: "BorderUnlock_userId_fkey")
 
-  borderUnlocks BorderUnlock[]
+  @@unique([userId, borderId], map: "BorderUnlock_userId_borderId_key")
+  @@index([borderId], map: "BorderUnlock_borderId_fkey")
 }
 
-model BorderUnlock {
-  id          String   @id @default(cuid())
+model pointtransaction {
+  id          String                @id
   userId      String
-  borderId    String
-  unlockType  UnlockType // ACHIEVEMENT, PURCHASE, ADMIN
-  unlockedAt  DateTime @default(now())
-  pricePaid   Int?     // Points spent if purchased
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  border Border @relation(fields: [borderId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, borderId])
-}
-
-model PointTransaction {
-  id          String      @id @default(cuid())
-  userId      String
-  type        PointType
+  type        pointtransaction_type
   amount      Int
-  description String?     @db.Text
-  metadata    Json?       // Additional data
-  createdAt   DateTime    @default(now())
+  description String?               @db.Text
+  metadata    String?               @db.LongText
+  createdAt   DateTime              @default(now())
+  user        user                  @relation(fields: [userId], references: [id], onDelete: Cascade, map: "PointTransaction_userId_fkey")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId], map: "PointTransaction_userId_fkey")
 }
 
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
+model session {
+  id           String   @id
+  sessionToken String   @unique(map: "Session_sessionToken_key")
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Session_userId_fkey")
+
+  @@index([userId], map: "Session_userId_fkey")
 }
 
-model User {
-  id              String    @id @default(cuid())
-  name            String?
-  email           String    @unique
-  emailVerified   DateTime?
-  password        String?
-  image           String?
-  bio             String?   @db.Text
-  location        String?
-  selectedBorder  String    @default("default")
-  points          Int       @default(0) // User points for unlocking content
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  role            UserRole  @default(USER)
-
-  accounts Account[]
-  sessions Session[]
-  activities Activity[]
-  achievements Achievement[]
-  borderUnlocks BorderUnlock[]
-  pointTransactions PointTransaction[]
+model user {
+  id               String             @id
+  name             String?
+  email            String             @unique(map: "User_email_key")
+  emailVerified    DateTime?
+  password         String?
+  image            String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  role             user_role          @default(USER)
+  bio              String?            @db.Text
+  location         String?
+  points           Int                @default(0)
+  selectedBorder   String             @default("default")
+  account          account[]
+  achievement      achievement[]
+  activity         activity[]
+  borderunlock     borderunlock[]
+  pointtransaction pointtransaction[]
+  session          session[]
 }
 
-model VerificationToken {
+model verificationtoken {
   identifier String
-  token      String   @unique
+  token      String   @unique(map: "VerificationToken_token_key")
   expires    DateTime
 
-  @@unique([identifier, token])
+  @@unique([identifier, token], map: "VerificationToken_identifier_token_key")
 }
 
-enum ActivityType {
+enum achievement_type {
+  FIRST_FORUM_POST
+  FORUM_REGULAR
+  RECIPE_CREATOR
+  SOCIAL_BUTTERFLY
+  EXPLORER
+  EARLY_ADOPTER
+  PURCHASE_MASTER
+  BORDER_COLLECTOR
+  POINTS_COLLECTOR
+  DAILY_VISITOR
+  RECIPE_MASTER
+  FORUM_EXPERT
+  COMMENTATOR_PRO
+  ACTIVE_MEMBER
+}
+
+enum activity_type {
   FORUM_POST
   FORUM_COMMENT
   RECIPE_CREATED
@@ -148,44 +165,27 @@ enum ActivityType {
   BADGE_EARNED
 }
 
-enum AchievementType {
-  FIRST_FORUM_POST      // Unlock bronze border
-  FORUM_REGULAR         // 10 forum posts
-  RECIPE_CREATOR        // 5 recipes created
-  SOCIAL_BUTTERFLY      // 20 comments
-  EXPLORER              // Visit all pages
-  EARLY_ADOPTER         // Registered in first week
-  PURCHASE_MASTER       // 5 purchases
-  BORDER_COLLECTOR      // Unlock all borders
-  POINTS_COLLECTOR      // 1000 points
-  DAILY_VISITOR         // 7 day streak
-  RECIPE_MASTER         // 25 recipes created
-  FORUM_EXPERT          // 100 forum posts
-  COMMENTATOR_PRO        // 100 comments
-  ACTIVE_MEMBER         // 30 days active streak
+enum pointtransaction_type {
+  EARNED
+  SPENT
+  ADMIN_GIVEN
+  REFUND
 }
 
-enum UserRole {
-  USER
+enum borderunlock_unlockType {
+  ACHIEVEMENT
+  PURCHASE
   ADMIN
 }
 
-enum BorderRarity {
+enum border_rarity {
   COMMON
   RARE
   EPIC
   LEGENDARY
 }
 
-enum UnlockType {
-  ACHIEVEMENT
-  PURCHASE
+enum user_role {
+  USER
   ADMIN
-}
-
-enum PointType {
-  EARNED        // Points earned from activities
-  SPENT         // Points spent on purchases
-  ADMIN_GIVEN   // Points given by admin
-  REFUND        // Points refunded
 }

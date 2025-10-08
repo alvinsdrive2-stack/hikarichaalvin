@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { signIn, useRouter } from "next-auth/react"
+import { signIn } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"

@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils"
 interface Border {
   id: string
   name: string
-  image: string
+  imageUrl: string
   unlocked: boolean
-  rarity?: "common" | "rare" | "epic" | "legendary"
+  rarity?: "COMMON" | "RARE" | "EPIC" | "LEGENDARY"
+  price?: number | null
 }
 
 interface BorderSelectorProps {

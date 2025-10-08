@@ -6,75 +6,35 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BorderPreview } from "@/components/ui/border-preview"
-import { User, LogOut, ShoppingBag } from "lucide-react"
+import { useProfileRealtime } from "@/hooks/useProfileRealtime"
+import { User, LogOut, ShoppingBag, Coins, Star } from "lucide-react"
 
 export function ProfileDropdown() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
-  const [userBorder, setUserBorder] = useState<any>(null)
 
-  // Fetch user border data
+  // Use real-time profile hook
+  const { userBorder, userPoints, fetchProfileData } = useProfileRealtime()
+
+  // Listen for profile updates from other components
   useEffect(() => {
-    if (session?.user) {
-      fetchUserBorder()
+    const handleProfileUpdate = () => {
+      fetchProfileData()
     }
-  }, [session])
 
-  const fetchUserBorder = async () => {
-    try {
-      const response = await fetch("/api/profile")
-      if (response.ok) {
-        const data = await response.json()
-        if (data.user.selectedBorder) {
-          // Base border options
-          const baseBorderOptions = [
-            {
-              id: "default",
-              name: "Default",
-              image: "/borders/default.svg",
-              rarity: "common" as const
-            },
-            {
-              id: "bronze",
-              name: "Bronze",
-              image: "/borders/bronze.svg",
-              rarity: "common" as const
-            },
-            {
-              id: "silver",
-              name: "Silver",
-              image: "/borders/silver.svg",
-              rarity: "rare" as const
-            },
-            {
-              id: "gold",
-              name: "Gold",
-              image: "/borders/gold.svg",
-              rarity: "epic" as const
-            },
-            {
-              id: "crystal",
-              name: "Crystal",
-              image: "/borders/crystal.svg",
-              rarity: "epic" as const
-            },
-            {
-              id: "diamond",
-              name: "Diamond",
-              image: "/borders/diamond.svg",
-              rarity: "legendary" as const
-            },
-          ]
+    // Listen for custom events from profile page
+    window.addEventListener('profile-updated', handleProfileUpdate)
+    window.addEventListener('border-updated', handleProfileUpdate)
+    window.addEventListener('points-updated', handleProfileUpdate)
 
-          const border = baseBorderOptions.find(b => b.id === data.user.selectedBorder)
-          setUserBorder(border || baseBorderOptions[0])
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching user border:", error)
+    return () => {
+      window.removeEventListener('profile-updated', handleProfileUpdate)
+      window.removeEventListener('border-updated', handleProfileUpdate)
+      window.removeEventListener('points-updated', handleProfileUpdate)
     }
-  }
+  }, [fetchProfileData])
 
+  
   if (!session) {
     return null
   }
@@ -97,7 +57,13 @@ export function ProfileDropdown() {
   const handleButtonClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsOpen(!isOpen)
+    const newIsOpen = !isOpen
+    setIsOpen(newIsOpen)
+
+    // Refresh data when opening dropdown
+    if (newIsOpen && session?.user) {
+      fetchProfileData()
+    }
   }
 
   const handleMenuItemClick = (action: string) => {
@@ -175,10 +141,48 @@ export function ProfileDropdown() {
                 <div className="flex flex-col flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{session.user?.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{session.user?.email}</p>
+
+                  {/* Border Info with Rarity */}
                   {userBorder && (
-                    <p className="text-xs text-muted-foreground">Border: {userBorder.name}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Star className={`h-3 w-3 ${
+                        userBorder.name === 'Bronze' ? 'text-amber-700' :
+                        userBorder.name === 'Silver' ? 'text-zinc-300' :
+                        userBorder.name === 'Gold' ? 'text-amber-400' :
+                        userBorder.rarity === 'Default' ? 'text-gray-400' :
+                        userBorder.rarity === 'Common' ? 'text-gray-500' :
+                        userBorder.rarity === 'Uncommon' ? 'text-emerald-400' :
+                        userBorder.rarity === 'Rare' ? 'text-sky-400' :
+                        userBorder.rarity === 'Epic' ? 'text-violet-400' :
+                        userBorder.rarity === 'Legendary' ? 'text-amber-500' :
+                        userBorder.rarity === 'Mythic' ? 'text-rose-500' :
+                        'text-gray-500'
+                      }`} />
+                      <p className={`text-xs ${
+                        userBorder.name === 'Bronze' ? 'text-amber-700' :
+                        userBorder.name === 'Silver' ? 'text-zinc-300' :
+                        userBorder.name === 'Gold' ? 'text-amber-400' :
+                        userBorder.rarity === 'Default' ? 'text-gray-400' :
+                        userBorder.rarity === 'Common' ? 'text-gray-500' :
+                        userBorder.rarity === 'Uncommon' ? 'text-emerald-400' :
+                        userBorder.rarity === 'Rare' ? 'text-sky-400' :
+                        userBorder.rarity === 'Epic' ? 'text-violet-400' :
+                        userBorder.rarity === 'Legendary' ? 'text-amber-500' :
+                        userBorder.rarity === 'Mythic' ? 'text-rose-500' :
+                        'text-gray-500'
+                      }`}>
+                        {userBorder.name}
+                      </p>
+
+                    </div>
                   )}
                 </div>
+              </div>
+
+              {/* Points Display */}
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+                <Coins className="h-4 w-4 text-yellow-500" />
+                <span className="text-sm font-medium">{userPoints.toLocaleString()} Points</span>
               </div>
             </div>
 

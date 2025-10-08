@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { prisma } from "@/lib/prisma"
+import mysql from "mysql2/promise"
 import { z } from "zod"
+
+let connection: mysql.Connection | null = null
+
+async function getConnection() {
+  if (!connection) {
+    connection = await mysql.createConnection({
+      host: 'localhost',
+      user: 'root',
+      password: '',
+      database: 'hikaricha_db'
+    })
+  }
+  return connection
+}
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -40,11 +54,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    })
+    const conn = await getConnection()
+    const [existingUsers] = await conn.execute(
+      'SELECT id FROM user WHERE email = ?',
+      [email]
+    ) as any
 
-    if (existingUser) {
+    if (existingUsers.length > 0) {
       return NextResponse.json(
         { error: "User with this email already exists" },
         { status: 400 }
@@ -55,20 +71,19 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12)
 
     // Create user
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      }
-    })
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    await conn.execute(
+      'INSERT INTO user (id, name, email, password, role, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+      [userId, name, email, hashedPassword, 'USER']
+    )
+
+    const user = {
+      id: userId,
+      name,
+      email,
+      role: 'USER',
+      createdAt: new Date()
+    }
 
     return NextResponse.json({
       message: "User created successfully",

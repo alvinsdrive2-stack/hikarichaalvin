@@ -7,9 +7,10 @@ import { Star } from "lucide-react"
 interface Border {
   id: string
   name: string
-  image: string
+  imageUrl: string
   unlocked: boolean
-  rarity?: "common" | "rare" | "epic" | "legendary"
+  rarity?: "COMMON" | "RARE" | "EPIC" | "LEGENDARY"
+  price?: number | null
 }
 
 interface BorderPreviewProps {
@@ -26,27 +27,39 @@ interface BorderPreviewProps {
 }
 
 const sizeConfig = {
-  xs: { container: "w-6 h-6", avatar: "w-4 h-4", inset: "inset-1" },
-  sm: { container: "w-8 h-8", avatar: "w-5 h-5", inset: "inset-1.5" },
-  md: { container: "w-10 h-10", avatar: "w-6 h-6", inset: "inset-2" },
-  lg: { container: "w-12 h-12", avatar: "w-8 h-8", inset: "inset-2" },
-  xl: { container: "w-14 h-14", avatar: "w-9 h-9", inset: "inset-2.5" },
-  "2xl": { container: "w-18 h-18", avatar: "w-11 h-11", inset: "inset-3.5" }
+  xs: { container: "w-6 h-6", avatar: "w-4 h-4", inset: "inset-[3px]" },
+  sm: { container: "w-8 h-8", avatar: "w-5 h-5", inset: "inset-[6px]" },
+  md: { container: "w-10 h-10", avatar: "w-6 h-6", inset: "inset-[8px]" },
+  lg: { container: "w-12 h-12", avatar: "w-8 h-8", inset: "inset-[8px]" },
+  xl: { container: "w-14 h-14", avatar: "w-9 h-9", inset: "inset-[10px]" },
+  "2xl": { container: "w-18 h-18", avatar: "w-11 h-11", inset: "inset-[14px]" }
 }
-
 const rarityColors = {
+  default: "border-slate-400",
   common: "border-gray-400",
-  rare: "border-blue-400",
-  epic: "border-purple-400",
-  legendary: "border-yellow-400"
+  uncommon: "border-emerald-400",
+  rare: "border-sky-400",
+  epic: "border-violet-400",
+  legendary: "border-amber-400",
+  mythic: "border-rose-400",
+  bronze: "border-amber-700",
+  silver: "border-zinc-400",
+  gold: "border-yellow-400",
 }
 
 const rarityBgColors = {
+  default: "bg-slate-100",
   common: "bg-gray-100",
-  rare: "bg-blue-100",
-  epic: "bg-purple-100",
-  legendary: "bg-yellow-100"
+  uncommon: "bg-emerald-100",
+  rare: "bg-sky-100",
+  epic: "bg-violet-100",
+  legendary: "bg-amber-100",
+  mythic: "bg-rose-100",
+  bronze: "bg-amber-100",
+  silver: "bg-zinc-100",
+  gold: "bg-yellow-100",
 }
+
 
 export function BorderPreview({
   border,
@@ -71,14 +84,22 @@ export function BorderPreview({
   }
 
   const getRarityColor = () => {
-    if (!border.rarity) return ""
-    return rarityColors[border.rarity]
+    if (!border || !border.rarity) return "" // 🛡️ safety check
+    const key = border.rarity.toLowerCase() as keyof typeof rarityColors
+    return rarityColors[key] || ""
   }
 
   const getRarityBgColor = () => {
-    if (!border.rarity) return ""
-    return rarityBgColors[border.rarity]
+    if (!border || !border.rarity) return ""
+    const key = border.rarity.toLowerCase() as keyof typeof rarityBgColors
+    return rarityBgColors[key] || ""
   }
+
+  if (!border) {
+    return <div className="text-gray-400 text-sm">Loading border...</div>
+  }
+
+
 
   return (
     <div
@@ -86,14 +107,14 @@ export function BorderPreview({
       onClick={onClick}
     >
       {/* Border Container */}
-      <div className={`relative ${config.container} ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''} ${getRarityColor()} overflow-visible`}>
+      <div className={`relative ${config.container} ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''} overflow-visible`}>
         {/* Border Image */}
         <img
-          src={border.image}
-          alt={`${border.name} border`}
-          className={`absolute inset-0 w-full h-full z-0 ${getRarityColor()} ${showRarity && border.rarity ? `border-2 ${getRarityColor()}` : ''} overflow-visible`}
+          src={border.imageUrl}
+          className={`absolute inset-0 w-full h-full z-20 ${showRarity && border.rarity ? `border-2 ${getRarityColor()}` : ''} overflow-visible`}
           style={{
             objectFit: 'contain',
+            objectPosition: 'center',
             overflow: 'visible'
           }}
           onError={(e) => {
@@ -120,7 +141,7 @@ export function BorderPreview({
 
         {/* Avatar */}
         <div className={`absolute ${config.inset} flex items-center justify-center`}>
-          <Avatar className={`${config.avatar} relative z-10 ${getRarityBgColor()}`}>
+          <Avatar className={`${config.avatar} relative z-0 ${getRarityBgColor()}`}>
             <AvatarImage
               src={avatarSrc || ""}
               alt={avatarName || ""}

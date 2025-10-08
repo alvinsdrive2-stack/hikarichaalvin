@@ -159,6 +159,7 @@ export async function initializeAchievementsForUser(userId: string) {
         },
         update: {},
         create: {
+          id: `ach_${userId}_${config.type}`,
           userId,
           type: config.type,
           title: config.title,
@@ -166,7 +167,8 @@ export async function initializeAchievementsForUser(userId: string) {
           targetValue: config.targetValue,
           currentValue: 0,
           isCompleted: false,
-          rewards: config.rewards
+          rewards: JSON.stringify(config.rewards),
+          updatedAt: new Date()
         }
       })
     })

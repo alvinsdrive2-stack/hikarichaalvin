@@ -1,10 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx prisma init:*)",
-      "Bash(git commit:*)",
-      "Bash(git remote set-url:*)",
-      "Bash(npm install:*)"
+      "Bash(netstat -ano)",
+      "Bash(findstr :3001)",
+      "Bash(taskkill:*)",
+      "Bash(findstr:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(mysql:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

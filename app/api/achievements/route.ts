@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getUserAchievements, initializeAchievementsForUser } from "@/lib/achievements"
-import { db } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 
 export async function GET() {
   try {
@@ -16,7 +16,7 @@ export async function GET() {
     await initializeAchievementsForUser(session.user.id)
 
     const achievements = await getUserAchievements(session.user.id)
-    const user = await db.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { points: true }
     })

@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { useProfileRealtime } from "@/hooks/useProfileRealtime"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,65 +16,40 @@ import { Badge } from "@/components/ui/badge"
 import { BorderPreview } from "@/components/ui/border-preview"
 import { BorderSelector } from "@/components/ui/border-selector"
 import { BorderDisplay } from "@/components/ui/border-display"
+import { BorderPreviewModal } from "@/components/ui/border-preview-modal"
 import { Loader2, User, MapPin, Calendar, Settings, Camera, Save, Edit2, Check, X, Palette, Star, MessageSquare, MessageCircle, ChefHat, Heart, ShoppingCart, Activity } from "lucide-react"
 
-// Dummy data untuk testing
-const dummyActivities = [
-  {
-    id: "dummy-1",
-    type: "FORUM_POST",
-    title: "Membuat postingan baru di forum",
-    description: "Resep Ayam Bakar Madura",
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 jam lalu
-  },
-  {
-    id: "dummy-2",
-    type: "RECIPE_CREATED",
-    title: "Resep baru ditambahkan",
-    description: "Soto Ayam Kuah Kuning",
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // 1 hari lalu
-  },
-  {
-    id: "dummy-3",
-    type: "FORUM_COMMENT",
-    title: "Berkomentar di forum",
-    description: "Tips memasak nasi goreng yang enak",
-    createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() // 2 hari lalu
-  },
-  {
-    id: "dummy-4",
-    type: "BADGE_EARNED",
-    title: "Badge baru didapatkan",
-    description: "Member Aktif - 10 postingan forum",
-    createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString() // 3 hari lalu
-  },
-  {
-    id: "dummy-5",
-    type: "RECIPE_LIKED",
-    title: "Resep kamu disukai",
-    description: "10 orang menyukai resep Soto Ayam kamu",
-    createdAt: new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString() // 5 hari lalu
-  }
-]
 
 export default function ProfilePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [activities, setActivities] = useState<any[]>([])
   const [borderOptions, setBorderOptions] = useState<any[]>([])
-  const [userPoints, setUserPoints] = useState(0)
   const [achievements, setAchievements] = useState<any[]>([])
+  const [selectedBorderForModal, setSelectedBorderForModal] = useState<any>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
     location: "",
-    selectedBorder: "default"
+    selectedBorder: ""
   })
+
+  // Use real-time profile hook
+  const {
+    profile,
+    userBorder,
+    userPoints,
+    isLoading,
+    fetchProfileData,
+    updateProfile,
+    selectBorder,
+    purchaseBorder
+  } = useProfileRealtime()
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -83,17 +59,40 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (session?.user) {
-      fetchUserProfile()
-      fetchUserActivities()
+      fetchProfileData()
       fetchBorderOptions()
-      fetchUserPoints()
       fetchUserAchievements()
     }
-  }, [session])
+  }, [session, fetchProfileData])
+
+  // Listen for activities updates from real-time hook
+  useEffect(() => {
+    const handleActivitiesUpdate = (event: CustomEvent) => {
+      setActivities(event.detail)
+    }
+
+    window.addEventListener('activities-updated', handleActivitiesUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('activities-updated', handleActivitiesUpdate as EventListener)
+    }
+  }, [])
+
+  // Update form data when profile changes
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        name: profile.name || "",
+        bio: profile.bio || "",
+        location: profile.location || "",
+        selectedBorder: profile.selectedBorder || ""
+      })
+    }
+  }, [profile])
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch("/api/profile")
+      const response = await fetch("/api/profile-raw")
       if (response.ok) {
         const data = await response.json()
         setFormData({
@@ -110,7 +109,7 @@ export default function ProfilePage() {
 
   const fetchUserActivities = async () => {
     try {
-      const response = await fetch("/api/activities")
+      const response = await fetch("/api/activities-raw")
       if (response.ok) {
         const data = await response.json()
         setActivities(data.activities || [])
@@ -122,28 +121,20 @@ export default function ProfilePage() {
 
   const fetchBorderOptions = async () => {
     try {
-      const response = await fetch("/api/borders")
+      // Use borders-raw API for database connection
+      const response = await fetch("/api/borders-raw")
       if (response.ok) {
         const data = await response.json()
         setBorderOptions(data.data || [])
+      } else {
+        console.error("Borders API returned error:", response.status)
       }
     } catch (error) {
       console.error("Gagal memuat borders:", error)
     }
   }
 
-  const fetchUserPoints = async () => {
-    try {
-      const response = await fetch("/api/points")
-      if (response.ok) {
-        const data = await response.json()
-        setUserPoints(data.data.points || 0)
-      }
-    } catch (error) {
-      console.error("Gagal memuat poin:", error)
-    }
-  }
-
+  
   const fetchUserAchievements = async () => {
     try {
       const response = await fetch("/api/achievements")
@@ -182,10 +173,11 @@ export default function ProfilePage() {
         // Clear the file input
         e.target.value = ''
 
-        // Refresh the session and page to show the new image
-        setTimeout(() => {
-          window.location.reload()
-        }, 500)
+        // Refresh profile data to get updated image
+        await fetchProfileData()
+
+        // Dispatch events for real-time updates across components
+        window.dispatchEvent(new CustomEvent('profile-updated', { detail: { image: data.userImage } }))
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || "Gagal mengupload foto")
@@ -199,104 +191,177 @@ export default function ProfilePage() {
   }
 
   const handleSaveProfile = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch("/api/profile", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      })
+    // Validate form data
+    if (!formData.name || formData.name.trim().length < 2) {
+      toast.error("Nama harus diisi minimal 2 karakter")
+      return
+    }
 
-      if (response.ok) {
-        toast.success("Profil berhasil diperbarui!")
-        setIsEditing(false)
-        fetchUserProfile()
-      } else {
-        toast.error("Gagal memperbarui profil")
+    if (formData.name.length > 50) {
+      toast.error("Nama maksimal 50 karakter")
+      return
+    }
+
+    if (formData.bio && formData.bio.length > 500) {
+      toast.error("Bio maksimal 500 karakter")
+      return
+    }
+
+    if (formData.location && formData.location.length > 100) {
+      toast.error("Lokasi maksimal 100 karakter")
+      return
+    }
+
+    const success = await updateProfile({
+      name: formData.name.trim(),
+      bio: formData.bio?.trim() || null,
+      location: formData.location?.trim() || null,
+      selectedBorder: formData.selectedBorder
+    })
+
+    if (success) {
+      toast.success("Profil berhasil diperbarui!")
+      setIsEditing(false)
+
+      // Dispatch events for real-time updates across components
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: {
+        name: formData.name.trim(),
+        bio: formData.bio?.trim() || null,
+        location: formData.location?.trim() || null
+      } }))
+
+      // Track profile update activity
+      try {
+        await fetch('/api/activities-raw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'PROFILE_UPDATE',
+            title: 'Profil diperbarui',
+            description: 'Anda mengubah informasi profil'
+          })
+        })
+      } catch (error) {
+        console.error('Failed to track activity:', error)
       }
-    } catch (error) {
-      toast.error("Terjadi kesalahan")
-    } finally {
-      setIsLoading(false)
+
+      // Refresh profile data to ensure consistency
+      await fetchProfileData()
+    } else {
+      toast.error("Gagal memperbarui profil")
     }
   }
 
-  const handleBorderSelect = async (borderId: string) => {
-    const border = borderOptions.find(b => b.id === borderId)
+  const handleBorderSelect = (borderId: string) => {
+    const allBorders = getAllBorderOptions()
+    const border = allBorders.find(b => b.id === borderId)
 
     if (!border) {
       toast.error("Border tidak ditemukan")
       return
     }
 
-    if (border?.unlocked) {
-      // Save border selection to database
-      try {
-        const response = await fetch("/api/borders/select", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ borderId })
-        })
+    // Show modal for all borders (unlocked or locked)
+    setSelectedBorderForModal(border)
+    setIsModalOpen(true)
+  }
 
-        if (response.ok) {
-          setFormData(prev => ({ ...prev, selectedBorder: borderId }))
-          toast.success(`Border ${border.name} berhasil dipilih!`)
-        } else {
-          const errorData = await response.json()
-          toast.error(errorData.error || "Gagal memilih border")
-        }
+  const handleModalPurchase = async (borderId: string) => {
+    if (!selectedBorderForModal) return
+
+    const result = await purchaseBorder(borderId)
+
+    if (result.success) {
+      toast.success(result.message)
+      // Refresh all profile data to get updated points and border status
+      await fetchProfileData()
+      // Update border options to reflect new unlocked status
+      await fetchBorderOptions()
+
+      // Dispatch events for real-time updates across components
+      window.dispatchEvent(new CustomEvent('border-updated', { detail: { borderId } }))
+      window.dispatchEvent(new CustomEvent('points-updated', { detail: { newBalance: result.newPointsBalance } }))
+
+      // Track border purchase activity
+      try {
+        await fetch('/api/activities-raw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'BORDER_PURCHASE',
+            title: `Border ${selectedBorderForModal.name} dibeli`,
+            description: `Anda membeli border seharga ${selectedBorderForModal.price} poin`,
+            metadata: { borderId, borderName: selectedBorderForModal.name, price: selectedBorderForModal.price }
+          })
+        })
       } catch (error) {
-        console.error("Error selecting border:", error)
-        toast.error("Terjadi kesalahan saat memilih border")
+        console.error('Failed to track activity:', error)
       }
+
+      // Refresh data to show updated points and border
+      await fetchProfileData()
     } else {
-      // Show purchase dialog if border has a price
-      if (border.price) {
-        if (userPoints >= border.price) {
-          if (confirm(`Beli border ${border.name} seharga ${border.price} poin?`)) {
-            await purchaseBorder(borderId)
-          }
-        } else {
-          toast.error(`Poin tidak cukup! Butuh ${border.price} poin, Anda punya ${userPoints} poin.`)
-        }
-      } else {
-        toast.error("Border ini harus dibuka melalui achievement!")
-      }
+      toast.error(result.error || "Gagal membeli border")
     }
   }
 
-  const purchaseBorder = async (borderId: string) => {
-    try {
-      const response = await fetch("/api/borders/purchase", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ borderId })
-      })
+  const handleModalSelect = async (borderId: string) => {
+    if (!selectedBorderForModal) return
 
-      const data = await response.json()
+    // Select border using real-time hook
+    const result = await selectBorder(borderId)
 
-      if (response.ok) {
-        toast.success(data.message)
-        // Refresh border options and user points
-        await fetchBorderOptions()
-        await fetchUserPoints()
-      } else {
-        toast.error(data.error || "Gagal membeli border")
+    if (result.success) {
+      toast.success(result.message)
+      // Refresh all profile data to get updated border
+      await fetchProfileData()
+
+      // Dispatch events for real-time updates across components
+      window.dispatchEvent(new CustomEvent('border-updated', { detail: { borderId } }))
+
+      // Track border selection activity
+      try {
+        await fetch('/api/activities-raw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'BORDER_SELECT',
+            title: `Border ${selectedBorderForModal.name} dipilih`,
+            description: 'Anda mengubah border profil',
+            metadata: { borderId, borderName: selectedBorderForModal.name }
+          })
+        })
+      } catch (error) {
+        console.error('Failed to track activity:', error)
       }
-    } catch (error) {
-      console.error("Error purchasing border:", error)
-      toast.error("Terjadi kesalahan saat membeli border")
+
+      // Refresh data to show updated border
+      await fetchProfileData()
+    } else {
+      toast.error(result.error || "Gagal memilih border")
     }
+  }
+
+  const getFallbackBorders = () => {
+    // Return empty array to force database connection
+    // If no borders in database, show message instead of dummy data
+    return []
+  }
+
+  const getAllBorderOptions = () => {
+    // Only use database data
+    return borderOptions
   }
 
   const getSelectedBorder = () => {
-    return borderOptions.find(b => b.id === formData.selectedBorder) || borderOptions[0]
+    // First try to use the userBorder from real-time hook
+    if (userBorder) {
+      return userBorder
+    }
+
+    // Fallback to form data
+    const allOptions = getAllBorderOptions()
+    return allOptions.find(b => b.id === formData.selectedBorder) || null
   }
 
   const getUserInitials = () => {
@@ -329,7 +394,6 @@ export default function ProfilePage() {
       default: return <Activity className="h-4 w-4" />
     }
   }
-
   if (status === "loading") {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -356,14 +420,26 @@ export default function ProfilePage() {
           <Card>
             <CardHeader className="text-center">
               <div className="relative mx-auto w-fit">
-                <BorderPreview
-                  border={getSelectedBorder()}
-                  size="2xl"
-                  avatarSrc={session.user?.image || ""}
-                  avatarName={session.user?.name || ""}
-                  showLabel={false}
-                  showLockStatus={false}
-                />
+                
+                {getSelectedBorder() ? (
+                  <BorderPreview
+                    border={getSelectedBorder()}
+                    size="2xl"
+                    avatarSrc={session.user?.image || ""}
+                    avatarName={session.user?.name || ""}
+                    showLabel={false}
+                    showLockStatus={false}
+                  />
+                ) : (
+                  <div className="relative">
+                    <Avatar className="w-24 h-24 mx-auto">
+                      <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
+                      <AvatarFallback className="text-lg">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                )}
                 {/* Camera Button */}
                 {isEditing && (
                   <label className="absolute bottom-2 right-2 bg-primary text-primary-foreground rounded-full p-1 cursor-pointer hover:bg-primary/90 z-20">
@@ -428,7 +504,7 @@ export default function ProfilePage() {
           <Card className="mt-6">
             <CardHeader>
               <CardTitle className="text-lg">Statistik</CardTitle>
-              <CardDescription className="text-xs text-green-600">✅ Terkoneksi database</CardDescription>
+              <CardDescription className="text-xs text-green-600">✅ Terkoneksi database (Raw SQL)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center">
@@ -521,7 +597,7 @@ export default function ProfilePage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Aktivitas Terbaru</CardTitle>
-                  <CardDescription>Riwayat aktivitas Anda di platform</CardDescription>
+                  <CardDescription className="text-xs text-green-600">✅ Terkoneksi database (aktivitas real-time)</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {activities.length > 0 ? (
@@ -542,32 +618,14 @@ export default function ProfilePage() {
                           </div>
                         </div>
                       ))}
-                      {/* Dummy activities untuk testing */}
-                      <div className="mt-6 pt-4 border-t">
-                        <p className="text-xs text-orange-600 mb-3">🔧 Data dummy untuk testing:</p>
-                        {dummyActivities.map((activity, index) => (
-                          <div key={`dummy-${index}`} className="flex items-start space-x-4 p-3 rounded-lg border border-orange-200 bg-orange-50/30">
-                            <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                              {getActivityIcon(activity.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">{activity.title}</p>
-                              {activity.description && (
-                                <p className="text-sm text-muted-foreground">{activity.description}</p>
-                              )}
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {formatDate(activity.createdAt)}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p>Belum ada aktivitas</p>
-                      <p className="text-xs text-orange-600 mt-2">🔧 Data dummy ditampilkan di bawah untuk testing</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Aktivitas Anda akan ditampilkan di sini setelah Anda memperbarui profil atau memilih border
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -589,15 +647,28 @@ export default function ProfilePage() {
                     <p className="text-sm text-muted-foreground mb-3">
                       Pilih border untuk foto profil Anda. Beberapa border membutuhkan poin untuk membuka.
                     </p>
-                    <p className="text-xs text-green-600 mb-3">✅ Kepemilikan border dari database</p>
-                    <BorderSelector
-                      borders={borderOptions}
-                      selectedBorder={formData.selectedBorder}
-                      onSelect={handleBorderSelect}
-                      size="lg"
-                      columns={3}
-                      showRarity={true}
-                    />
+                    <br></br>
+                    {borderOptions.length > 0 ? (
+                      <BorderSelector
+                        borders={borderOptions}
+                        selectedBorder={getSelectedBorder()?.id || formData.selectedBorder}
+                        onSelect={handleBorderSelect}
+                        size="lg"
+                        columns={3}
+                        showRarity={true}
+                      />
+                    ) : (
+                      <div className="text-center py-8">
+                        <Palette className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                        <p className="text-muted-foreground">Belum ada border yang tersedia</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Hubungi admin untuk menambahkan border options ke database
+                        </p>
+                        <p className="text-xs text-orange-600 mt-4">
+                          🔧 Border data dimuat dari database - tidak ada fallback
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -689,6 +760,18 @@ export default function ProfilePage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Border Preview Modal */}
+      <BorderPreviewModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        border={selectedBorderForModal}
+        userPoints={userPoints}
+        onPurchase={handleModalPurchase}
+        onSelect={handleModalSelect}
+        userAvatar={session.user?.image || ""}
+        userName={session.user?.name || ""}
+      />
     </div>
   )
 }

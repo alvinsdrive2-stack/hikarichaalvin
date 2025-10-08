@@ -79,11 +79,12 @@ export async function PUT(req: NextRequest) {
     // Create activity log
     await prisma.activity.create({
       data: {
+        id: `act_${user.id}_${Date.now()}`,
         userId: user.id,
         type: "PROFILE_UPDATE",
         title: "Profil diperbarui",
         description: "Anda memperbarui informasi profil",
-        metadata: validatedData,
+        metadata: JSON.stringify(validatedData),
       }
     })
 
