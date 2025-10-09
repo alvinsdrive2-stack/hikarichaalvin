@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "./button"
 import { Badge } from "./badge"
@@ -49,117 +49,105 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const quillRef = useRef<any>(null)
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Custom Quill modules and toolbar
-      const modules = {
-        toolbar: {
-          container: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            ['blockquote', 'code-block'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            [{ 'script': 'sub'}, { 'script': 'super' }],
-            [{ 'indent': '-1'}, { 'indent': '+1' }],
-            [{ 'color': [] }, { 'background': [] }],
-            ['link', 'image', 'video'],
-            ['clean']
-          ],
-          handlers: {
-            image: imageHandler,
-            link: linkHandler
+  // Image handler that supports file upload
+  const imageHandler = useCallback(() => {
+    const input = document.createElement('input')
+    input.setAttribute('type', 'file')
+    input.setAttribute('accept', 'image/*')
+    input.click()
+
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (file) {
+        const formData = new FormData()
+        formData.append('image', file)
+
+        try {
+          console.log('🖼️ Uploading image file:', file.name, file.size)
+          const response = await fetch('/api/upload/image', {
+            method: 'POST',
+            body: formData
+          })
+
+          console.log('📤 Upload response status:', response.status)
+
+          if (response.ok) {
+            const data = await response.json()
+            console.log('✅ Upload response data:', data)
+
+            const quill = quillRef.current?.getEditor()
+            if (!quill) {
+              console.error('❌ Quill editor not found')
+              return
+            }
+
+            const range = quill.getSelection()
+            console.log('📍 Inserting image at range:', range, 'URL:', data.data.url)
+
+            // Get current cursor position or use end of content
+            const index = range ? range.index : quill.getLength()
+
+            // Insert image with proper HTML attributes for better display
+            quill.insertEmbed(index, 'image', data.data.url, 'user')
+
+            // Move cursor after the image
+            quill.setSelection(index + 1)
+
+            console.log('✅ Image inserted successfully at position:', index)
+          } else {
+            console.error('❌ Upload failed with status:', response.status)
+            const errorData = await response.text()
+            console.error('Error response:', errorData)
+
+            // Fallback to base64 if upload fails
+            const reader = new FileReader()
+            reader.onload = (e) => {
+              const quill = quillRef.current?.getEditor()
+              if (quill) {
+                const range = quill.getSelection()
+                const index = range ? range.index : quill.getLength()
+                quill.insertEmbed(index, 'image', e.target?.result, 'user')
+                quill.setSelection(index + 1)
+              }
+            }
+            reader.readAsDataURL(file)
           }
-        },
-        clipboard: {
-          matchVisual: false,
-        }
-      }
-
-      // Custom formats for matcha-specific content
-      const formats = [
-        'header', 'bold', 'italic', 'underline', 'strike', 'blockquote',
-        'list', 'bullet', 'indent', 'script', 'align', 'direction',
-        'size', 'color', 'background',
-        'link', 'image', 'video', 'code-block', 'formula'
-      ]
-
-      // Image handler that supports file upload
-      function imageHandler() {
-        const input = document.createElement('input')
-        input.setAttribute('type', 'file')
-        input.setAttribute('accept', 'image/*')
-        input.click()
-
-        input.onchange = async () => {
-          const file = input.files?.[0]
-          if (file) {
-            const formData = new FormData()
-            formData.append('image', file)
-
-            try {
-              const response = await fetch('/api/upload/image', {
-                method: 'POST',
-                body: formData
-              })
-
-              if (response.ok) {
-                const data = await response.json()
-                const range = quillRef.current?.getEditor().getSelection()
-                quillRef.current?.getEditor().insertEmbed(
-                  range?.index || 0,
-                  'image',
-                  data.url
-                )
-              } else {
-                // Fallback to base64 if upload fails
-                const reader = new FileReader()
-                reader.onload = (e) => {
-                  const range = quillRef.current?.getEditor().getSelection()
-                  quillRef.current?.getEditor().insertEmbed(
-                    range?.index || 0,
-                    'image',
-                    e.target?.result
-                  )
-                }
-                reader.readAsDataURL(file)
-              }
-            } catch (error) {
-              console.error('Image upload failed:', error)
-              // Fallback to base64
-              const reader = new FileReader()
-              reader.onload = (e) => {
-                const range = quillRef.current?.getEditor().getSelection()
-                quillRef.current?.getEditor().insertEmbed(
-                  range?.index || 0,
-                  'image',
-                  e.target?.result
-                )
-              }
-              reader.readAsDataURL(file)
+        } catch (error) {
+          console.error('❌ Image upload failed:', error)
+          // Fallback to base64
+          const reader = new FileReader()
+          reader.onload = (e) => {
+            const quill = quillRef.current?.getEditor()
+            if (quill) {
+              const range = quill.getSelection()
+              const index = range ? range.index : quill.getLength()
+              quill.insertEmbed(index, 'image', e.target?.result, 'user')
+              quill.setSelection(index + 1)
             }
           }
+          reader.readAsDataURL(file)
         }
       }
+    }
+  }, [quillRef])
 
-      // Link handler with validation
-      function linkHandler() {
-        const range = quillRef.current?.getEditor().getSelection()
-        const url = prompt('Masukkan URL:')
+  // Link handler with validation
+  const linkHandler = useCallback(() => {
+    const range = quillRef.current?.getEditor().getSelection()
+    const url = prompt('Masukkan URL:')
 
-        if (url) {
-          // Validate URL
-          try {
-            new URL(url)
-            quillRef.current?.getEditor().formatText(
-              range?.index || 0,
-              range?.length || 0,
-              'link',
-              url
-            )
-          } catch {
-            alert('URL tidak valid')
-          }
-        }
+    if (url) {
+      // Validate URL
+      try {
+        new URL(url)
+        quillRef.current?.getEditor().formatText(
+          range?.index || 0,
+          range?.length || 0,
+          'link',
+          url
+        )
+      } catch {
+        alert('URL tidak valid')
       }
     }
   }, [])
@@ -176,7 +164,11 @@ export function RichTextEditor({
         [{ 'color': [] }, { 'background': [] }],
         ['link', 'image', 'video'],
         ['clean']
-      ]
+      ],
+      handlers: {
+        image: imageHandler,
+        link: linkHandler
+      }
     },
     clipboard: {
       matchVisual: false,
@@ -213,7 +205,25 @@ export function RichTextEditor({
           style={{ height: `${height}px` }}
           className="bg-white"
         />
-        <div className="h-12" /> // Spacer for toolbar
+        <style jsx>{`
+          :global(.ql-editor img) {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: block;
+          }
+          :global(.ql-editor .ql-image) {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: block;
+          }
+        `}</style>
+        <div className="h-12" /> {/* Spacer for toolbar */}
       </div>
     )
   }

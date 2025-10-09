@@ -165,6 +165,7 @@ export function SimpleTextEditor({
 
         // Try upload to server first
         try {
+          console.log('SimpleTextEditor: Uploading image:', file.name)
           const formData = new FormData()
           formData.append('image', file)
 
@@ -173,15 +174,20 @@ export function SimpleTextEditor({
             body: formData
           })
 
+          console.log('SimpleTextEditor: Response status:', response.status)
+
           if (response.ok) {
             const data = await response.json()
+            console.log('SimpleTextEditor: Upload successful, URL:', data.data.url)
             newImages.push(data.data.url)
           } else {
+            console.error('SimpleTextEditor: Upload failed')
             // Fallback to base64
             const base64 = await fileToBase64(file)
             newImages.push(base64)
           }
         } catch (error) {
+          console.error('SimpleTextEditor: Upload error:', error)
           // Fallback to base64
           const base64 = await fileToBase64(file)
           newImages.push(base64)
@@ -292,6 +298,16 @@ export function SimpleTextEditor({
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
+        <style jsx>{`
+          :global(.simple-editor-image) {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: block;
+          }
+        `}</style>
         {/* Mode Indicator */}
         <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
           <Badge variant="outline" className="text-xs">
@@ -316,7 +332,7 @@ export function SimpleTextEditor({
                   <img
                     src={image}
                     alt={`Upload ${index + 1}`}
-                    className="w-20 h-20 object-cover rounded-md border"
+                    className="w-20 h-20 object-cover rounded-md border simple-editor-image"
                   />
                   <Button
                     variant="destructive"

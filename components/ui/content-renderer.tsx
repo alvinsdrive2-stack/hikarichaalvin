@@ -9,7 +9,20 @@ interface ContentRendererProps {
 }
 
 export function ContentRenderer({ content, className = "" }: ContentRendererProps) {
-  // Convert @mentions to clickable links
+  // First, check if content contains HTML (images from Rich Text Editor)
+  const containsHTML = /<[^>]+>/.test(content)
+
+  if (containsHTML) {
+    // Content contains HTML, render with dangerouslySetInnerHTML
+    return (
+      <div
+        className={`prose prose-sm max-w-none ${className}`}
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    )
+  }
+
+  // Plain text content (from Simple Mode), process mentions and line breaks
   const renderContentWithMentions = (text: string) => {
     // Regex to match @mentions (@username)
     const mentionRegex = /@([a-zA-Z0-9_]+)/g

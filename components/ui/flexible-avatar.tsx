@@ -1,7 +1,17 @@
 "use client"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { BorderPreview } from "@/components/ui/border-preview"
 import { useEffect, useState } from "react"
+
+interface Border {
+  id: string
+  name: string
+  imageUrl: string
+  unlocked: boolean
+  rarity?: "COMMON" | "RARE" | "EPIC" | "LEGENDARY"
+  price?: number | null
+}
 
 interface FlexibleAvatarProps {
   src?: string
@@ -10,6 +20,8 @@ interface FlexibleAvatarProps {
   className?: string
   showBorder?: boolean
   borderColor?: string
+  userBorder?: Border | null
+  fallback?: string
 }
 
 const sizeConfig = {
@@ -28,7 +40,9 @@ export function FlexibleAvatar({
   size = "md",
   className = "",
   showBorder = false,
-  borderColor = "border-gray-400"
+  borderColor = "border-gray-400",
+  userBorder = null,
+  fallback
 }: FlexibleAvatarProps) {
   const [currentSrc, setCurrentSrc] = useState(src)
 
@@ -57,13 +71,31 @@ export function FlexibleAvatar({
   }, [])
 
   const getUserInitials = () => {
-    return name
+    const nameToUse = fallback || name
+    return nameToUse
       ?.split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase() || "U"
   }
 
+  // If user has a border, use BorderPreview
+  if (userBorder) {
+    return (
+      <BorderPreview
+        border={userBorder}
+        size={size}
+        avatarSrc={currentSrc}
+        avatarName={name}
+        showLabel={false}
+        showLockStatus={false}
+        showRarity={false}
+        className={className}
+      />
+    )
+  }
+
+  // Fallback to regular avatar
   return (
     <Avatar
       className={`${config.avatar} ${showBorder ? `ring-2 ring-offset-2 ${borderColor}` : ''} ${className}`}

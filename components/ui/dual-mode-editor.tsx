@@ -44,10 +44,21 @@ export function DualModeEditor({
   const [internalMode, setInternalMode] = useState<"rich" | "simple">("simple")
   const [mode, setMode] = useState<"rich" | "simple" | "choice">(propMode)
 
+  // Extract and track images from the HTML value
+  const [extractedImages, setExtractedImages] = useState<string[]>(() => {
+    return extractImagesFromHtml(value)
+  })
+
   // Update mode when propMode changes
   useEffect(() => {
     setMode(propMode)
   }, [propMode])
+
+  // Update extracted images when value changes
+  useEffect(() => {
+    const newImages = extractImagesFromHtml(value)
+    setExtractedImages(newImages)
+  }, [value])
 
   const isModeChoice = mode === "choice"
   const currentMode = isModeChoice ? internalMode : mode
@@ -75,11 +86,12 @@ export function DualModeEditor({
     // Convert line breaks
     formattedText = formattedText.replace(/\n/g, '<br>')
 
-    // Add images at the beginning
+    // Add images at the beginning - use extractedImages from current state + new images
+    const allImages = [...extractedImages, ...images]
     let finalContent = formattedText
-    if (images.length > 0) {
-      const imageHtml = images.map(img =>
-        `<img src="${img}" alt="Shared image" class="max-w-full rounded-lg shadow-sm my-2" />`
+    if (allImages.length > 0) {
+      const imageHtml = allImages.map(img =>
+        `<img src="${img}" alt="Shared image" class="max-w-full rounded-lg shadow-sm my-2" style="display: block; margin: 8px 0;" />`
       ).join('')
       finalContent = imageHtml + '<br>' + formattedText
     }
@@ -266,8 +278,8 @@ export function DualModeEditor({
         onChange={handleSimpleChange}
         placeholder={placeholder}
         onImageUpload={(newImages) => {
-          const existingImages = extractImagesFromHtml(value)
-          const allImages = [...existingImages, ...newImages]
+          console.log('🖼️ New images uploaded:', newImages)
+          console.log('📷 Current extracted images:', extractedImages)
           const currentText = extractTextFromHtml(value)
           handleSimpleChange(currentText)
         }}

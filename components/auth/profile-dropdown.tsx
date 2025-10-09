@@ -95,7 +95,10 @@ export function ProfileDropdown() {
 
   const handleLogout = async () => {
     try {
-      await signOut()
+      await signOut({
+        redirect: true,
+        callbackUrl: '/'
+      })
       toast.success("Logout berhasil!")
     } catch (error) {
       toast.error("Gagal logout")

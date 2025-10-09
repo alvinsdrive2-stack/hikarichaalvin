@@ -8,19 +8,49 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, MessageSquare, Heart, Calendar, Trophy } from "lucide-react"
+import { ArrowLeft, MessageSquare, Heart, Calendar, Trophy, Users, UserPlus, MapPin, Globe, Coffee } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { FlexibleAvatar } from "@/components/ui/flexible-avatar"
+import { FriendList } from "@/components/social/friend-system"
+import { User } from "lucide-react"
 
 interface User {
   id: string
   name: string
   email: string
-  avatar?: string
+  image?: string
   points: number
   role?: string
   bio?: string
   createdAt: string
+  friendCount?: number
+  followerCount?: number
+  followingCount?: number
+  postCount?: number
+  customStatus?: string
+  location?: string
+  website?: string
+  favoriteMatcha?: string
+  experienceLevel?: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT'
+  userStatus?: {
+    status: 'ONLINE' | 'AWAY' | 'BUSY' | 'OFFLINE';
+    lastSeen: string;
+  }
+  userProfile?: {
+    bio?: string;
+    location?: string;
+    website?: string;
+    favoriteMatcha?: string;
+    experienceLevel?: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
+  }
+  friendshipStatus?: 'NONE' | 'FRIENDS' | 'REQUEST_SENT' | 'REQUEST_RECEIVED';
+}
+
+interface Friend {
+  id: string;
+  friend: User;
+  createdAt: string;
 }
 
 interface Achievement {
@@ -42,7 +72,9 @@ export default function UserProfilePage() {
 
   const [user, setUser] = useState<User | null>(null)
   const [achievements, setAchievements] = useState<Achievement[]>([])
+  const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
+  const [friendActionLoading, setFriendActionLoading] = useState(false)
 
   const isOwnProfile = session?.user?.id === userId
 
@@ -54,14 +86,24 @@ export default function UserProfilePage() {
 
   const fetchUserData = async () => {
     try {
-      const response = await fetch(`/api/achievements/${userId}`)
-      if (response.ok) {
-        const data = await response.json()
+      const [achievementsResponse, friendsResponse] = await Promise.all([
+        fetch(`/api/achievements/${userId}`),
+        fetch(`/api/friends?type=friends&userId=${userId}`)
+      ])
+
+      if (achievementsResponse.ok) {
+        const data = await achievementsResponse.json()
         setUser(data.user)
         setAchievements(data.achievements)
       } else {
         toast.error("User not found")
         router.push("/")
+        return
+      }
+
+      if (friendsResponse.ok) {
+        const friendsData = await friendsResponse.json()
+        setFriends(friendsData.friends || [])
       }
     } catch (error) {
       console.error("Error fetching user data:", error)
@@ -78,6 +120,74 @@ export default function UserProfilePage() {
       day: 'numeric'
     })
   }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ONLINE':
+        return 'bg-green-500';
+      case 'AWAY':
+        return 'bg-yellow-500';
+      case 'BUSY':
+        return 'bg-red-500';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
+  const getStatusText = (status: string, lastSeen: string) => {
+    switch (status) {
+      case 'ONLINE':
+        return 'Online';
+      case 'AWAY':
+        return 'Away';
+      case 'BUSY':
+        return 'Busy';
+      default:
+        const lastSeenDate = new Date(lastSeen);
+        const now = new Date();
+        const diffInMinutes = Math.floor((now.getTime() - lastSeenDate.getTime()) / (1000 * 60));
+
+        if (diffInMinutes < 1) return 'Just now';
+        if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+        if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+        return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    }
+  };
+
+  const handleSendFriendRequest = async () => {
+    if (!session?.user?.id || !user || user.friendshipStatus !== 'NONE') return;
+
+    setFriendActionLoading(true);
+    try {
+      const response = await fetch('/api/friends', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          receiverId: user.id
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Friend request sent!');
+        setUser(prev => prev ? { ...prev, friendshipStatus: 'REQUEST_SENT' } : null);
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to send friend request');
+      }
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      toast.error('Failed to send friend request');
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const handleStartChat = (friendId: string) => {
+    // TODO: Implement chat functionality
+    toast.info('Chat feature coming soon!');
+  };
 
   const getAchievementIcon = (type: string) => {
     switch (type) {
@@ -150,38 +260,127 @@ export default function UserProfilePage() {
             <div className="flex flex-col lg:flex-row items-start gap-6">
               {/* Avatar */}
               <div className="flex flex-col items-center">
-                <Avatar className="w-24 h-24">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="text-2xl">
-                    {user.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="mt-2 text-center">
+                <div className="relative">
+                  <FlexibleAvatar
+                    src={user.image}
+                    alt={user.name}
+                    fallback={user.name?.charAt(0)?.toUpperCase() || 'U'}
+                    size="xl"
+                    className="ring-4 ring-background"
+                  />
+                  {user.userStatus && (
+                    <div
+                      className={`absolute bottom-2 right-2 h-6 w-6 rounded-full border-4 border-background ${getStatusColor(
+                        user.userStatus.status
+                      )}`}
+                    />
+                  )}
+                </div>
+                <div className="mt-2 text-center space-y-1">
                   <Badge variant="outline" className="text-xs">
                     {user.role || 'Member'}
                   </Badge>
+                  {user.userStatus && (
+                    <div className="text-xs text-muted-foreground">
+                      {getStatusText(user.userStatus.status, user.userStatus.lastSeen)}
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* User Info */}
               <div className="flex-1 text-center lg:text-left">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                  {user.name}
-                </h1>
+                <div className="flex items-center justify-center lg:justify-start gap-2 mb-2">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {user.name}
+                  </h1>
+                  {user.customStatus && (
+                    <span className="text-sm text-muted-foreground">• {user.customStatus}</span>
+                  )}
+                </div>
                 <p className="text-gray-600 mb-2">{user.email}</p>
-                {user.bio && (
-                  <p className="text-gray-700 mb-4 max-w-2xl">{user.bio}</p>
+
+                {/* Extended Bio */}
+                {(user.bio || user.userProfile?.bio) && (
+                  <p className="text-gray-700 mb-4 max-w-2xl">
+                    {user.userProfile?.bio || user.bio}
+                  </p>
                 )}
-                <div className="flex flex-col sm:flex-row gap-4 text-sm text-gray-500">
-                  <div className="flex items-center justify-center gap-1">
+
+                {/* Additional Info */}
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 text-sm text-gray-500 mb-4">
+                  <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
                     Joined {formatDate(user.createdAt)}
                   </div>
-                  <div className="flex items-center justify-center gap-1">
+                  <div className="flex items-center gap-1">
                     <Trophy className="h-4 w-4" />
                     {user.points} Points
                   </div>
+                  {user.location && (
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-4 w-4" />
+                      {user.location}
+                    </div>
+                  )}
+                  {user.userProfile?.experienceLevel && (
+                    <div className="flex items-center gap-1">
+                      <Coffee className="h-4 w-4" />
+                      {user.userProfile.experienceLevel} Matcha Lover
+                    </div>
+                  )}
                 </div>
+
+                {/* Social Stats */}
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-6 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-blue-600">{user.friendCount || 0}</span>
+                    <span className="text-gray-500">Friends</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Heart className="h-4 w-4 text-red-500" />
+                    <span className="font-medium text-red-500">{user.followerCount || 0}</span>
+                    <span className="text-gray-500">Followers</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <User className="h-4 w-4 text-green-600" />
+                    <span className="font-medium text-green-600">{user.followingCount || 0}</span>
+                    <span className="text-gray-500">Following</span>
+                  </div>
+                  {user.postCount !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="h-4 w-4 text-purple-600" />
+                      <span className="font-medium text-purple-600">{user.postCount}</span>
+                      <span className="text-gray-500">Posts</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Favorite Matcha */}
+                {user.userProfile?.favoriteMatcha && (
+                  <div className="mt-3 flex items-center justify-center lg:justify-start gap-2 text-sm">
+                    <Coffee className="h-4 w-4 text-green-600" />
+                    <span className="text-gray-600">
+                      Favorite: <span className="font-medium text-green-600">{user.userProfile.favoriteMatcha}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Website */}
+                {user.userProfile?.website && (
+                  <div className="mt-2 flex items-center justify-center lg:justify-start gap-2 text-sm">
+                    <Globe className="h-4 w-4 text-blue-600" />
+                    <a
+                      href={user.userProfile.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {user.userProfile.website}
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -191,9 +390,50 @@ export default function UserProfilePage() {
                     Edit Profile
                   </Button>
                 ) : (
-                  <Button variant="outline">
-                    Message
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleStartChat(user.id)}
+                    >
+                      Message
+                    </Button>
+                    {user.friendshipStatus === 'NONE' && (
+                      <Button
+                        onClick={handleSendFriendRequest}
+                        disabled={friendActionLoading}
+                        className="w-full"
+                      >
+                        {friendActionLoading ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-current" />
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Add Friend
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {user.friendshipStatus === 'FRIENDS' && (
+                      <Badge variant="default" className="w-full justify-center py-2">
+                        <Users className="h-4 w-4 mr-2" />
+                        Friends
+                      </Badge>
+                    )}
+                    {user.friendshipStatus === 'REQUEST_SENT' && (
+                      <Badge variant="secondary" className="w-full justify-center py-2">
+                        Request Sent
+                      </Badge>
+                    )}
+                    {user.friendshipStatus === 'REQUEST_RECEIVED' && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => router.push('/friends?tab=requests')}
+                        className="w-full"
+                      >
+                        View Request
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -204,6 +444,14 @@ export default function UserProfilePage() {
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="friends">
+              Friends
+              {friends.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {friends.length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="achievements">
               Achievements
               {achievements.filter(a => a.isCompleted).length > 0 && (
@@ -289,6 +537,14 @@ export default function UserProfilePage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="friends" className="space-y-4">
+            <FriendList
+              friends={friends}
+              onStartChat={handleStartChat}
+              className="w-full"
+            />
           </TabsContent>
 
           <TabsContent value="achievements" className="space-y-4">

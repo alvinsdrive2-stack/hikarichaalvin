@@ -324,6 +324,21 @@ export class DatabaseService {
     }
   }
 
+  async getBorderById(borderId: string): Promise<any | null> {
+    try {
+      const conn = await getConnection();
+      const [rows] = await conn.execute(
+        'SELECT id, name, description, imageUrl, price, rarity, isActive, sortOrder FROM border WHERE id = ? AND isActive = true',
+        [borderId]
+      ) as any;
+
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Error getting border by ID:', error);
+      return null;
+    }
+  }
+
   async getAllBorders(): Promise<any[]> {
     try {
       const conn = await getConnection();
