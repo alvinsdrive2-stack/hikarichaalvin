@@ -138,6 +138,85 @@ model verificationtoken {
   @@unique([identifier, token], map: "VerificationToken_identifier_token_key")
 }
 
+model forum_categories {
+  id            Int             @id @default(autoincrement())
+  slug          String          @unique(map: "slug") @db.VarChar(50)
+  name          String          @db.VarChar(100)
+  description   String?         @db.Text
+  color         String?         @default("gray") @db.VarChar(20)
+  icon          String?         @db.VarChar(50)
+  created_at    DateTime        @default(now()) @db.Timestamp(0)
+  updated_at    DateTime        @default(now()) @db.Timestamp(0)
+  forum_threads forum_threads[]
+}
+
+model forum_likes {
+  id          Int                     @id @default(autoincrement())
+  user_id     String                  @db.VarChar(50)
+  target_id   String                  @db.VarChar(20)
+  target_type forum_likes_target_type
+  created_at  DateTime                @default(now()) @db.Timestamp(0)
+
+  @@unique([user_id, target_id, target_type], map: "unique_like")
+  @@index([target_id, target_type], map: "idx_target")
+  @@index([user_id], map: "idx_user")
+}
+
+model forum_replies {
+  id                  String          @id @db.VarChar(20)
+  thread_id           String          @db.VarChar(20)
+  parent_id           String?         @db.VarChar(20)
+  content             String          @db.Text
+  author_id           String          @db.VarChar(50)
+  likes               Int?            @default(0)
+  is_deleted          Boolean?        @default(false)
+  created_at          DateTime        @default(now()) @db.Timestamp(0)
+  updated_at          DateTime        @default(now()) @db.Timestamp(0)
+  forum_threads       forum_threads   @relation(fields: [thread_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "forum_replies_ibfk_1")
+  forum_replies       forum_replies?  @relation("forum_repliesToforum_replies", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "forum_replies_ibfk_2")
+  other_forum_replies forum_replies[] @relation("forum_repliesToforum_replies")
+
+  @@index([parent_id], map: "forum_replies_ibfk_2")
+  @@index([thread_id], map: "thread_id")
+}
+
+model forum_threads {
+  id               String           @id @db.VarChar(20)
+  title            String           @db.VarChar(200)
+  content          String           @db.Text
+  excerpt          String?          @db.VarChar(500)
+  category_id      Int
+  author_id        String           @db.VarChar(50)
+  views            Int?             @default(0)
+  likes            Int?             @default(0)
+  replies          Int?             @default(0)
+  is_pinned        Boolean?         @default(false)
+  is_locked        Boolean?         @default(false)
+  is_deleted       Boolean?         @default(false)
+  created_at       DateTime         @default(now()) @db.Timestamp(0)
+  updated_at       DateTime         @default(now()) @db.Timestamp(0)
+  last_reply_at    DateTime?        @db.Timestamp(0)
+  last_reply_by    String?          @db.VarChar(50)
+  forum_replies    forum_replies[]
+  forum_categories forum_categories @relation(fields: [category_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "forum_threads_ibfk_1")
+  forum_views      forum_views[]
+
+  @@index([category_id], map: "category_id")
+}
+
+model forum_views {
+  id            Int           @id @default(autoincrement())
+  user_id       String?       @db.VarChar(50)
+  thread_id     String        @db.VarChar(20)
+  ip_address    String        @db.VarChar(45)
+  user_agent    String?       @db.Text
+  viewed_at     DateTime      @default(now()) @db.Timestamp(0)
+  forum_threads forum_threads @relation(fields: [thread_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "forum_views_ibfk_1")
+
+  @@index([thread_id, ip_address], map: "idx_thread_ip")
+  @@index([thread_id, user_id], map: "idx_thread_user")
+}
+
 enum achievement_type {
   FIRST_FORUM_POST
   FORUM_REGULAR
@@ -178,14 +257,25 @@ enum borderunlock_unlockType {
   ADMIN
 }
 
-enum border_rarity {
-  COMMON
-  RARE
-  EPIC
-  LEGENDARY
-}
-
 enum user_role {
   USER
   ADMIN
+}
+
+enum forum_likes_target_type {
+  thread
+  reply
+}
+
+enum border_rarity {
+  Default
+  Common
+  Uncommon
+  Rare
+  Epic
+  Legendary
+  Mythic
+  Bronze
+  Silver
+  Gold
 }

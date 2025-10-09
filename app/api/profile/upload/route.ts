@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { dbService } from "@/lib/db-raw"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
 
@@ -49,33 +49,33 @@ export async function POST(req: NextRequest) {
     // Write file
     await writeFile(filepath, buffer)
 
+    // Get user ID from session email
+    const userResult = await dbService.getUserByEmail(session.user.email)
+    if (!userResult) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     // Update user profile with new image URL
     const imageUrl = `/uploads/avatars/${filename}`
-    await prisma.user.update({
-      where: { email: session.user.email },
-      data: { image: imageUrl }
-    })
 
-    // Create activity log
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true }
-    })
+    // Update user using raw DB service
+    const conn = await dbService.getConnection()
+    await conn.execute(
+      'UPDATE user SET image = ? WHERE email = ?',
+      [imageUrl, session.user.email]
+    )
 
-    if (user) {
-      await prisma.activity.create({
-        data: {
-          userId: user.id,
-          type: "PROFILE_UPDATE",
-          title: "Foto profil diperbarui",
-          description: "Anda mengubah foto profil",
-        }
-      })
-    }
+    // Create activity log using raw DB service
+    await dbService.createActivity(
+      userResult.id,
+      "PROFILE_UPDATE",
+      "Foto profil diperbarui",
+      "Anda mengubah foto profil"
+    )
 
     return NextResponse.json({
       message: "Profile image updated successfully",
-      imageUrl
+      userImage: imageUrl  // Changed to match client expectation
     })
   } catch (error) {
     console.error("Profile image upload error:", error)

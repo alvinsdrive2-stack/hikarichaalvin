@@ -211,7 +211,7 @@ export function BorderDemo() {
             <div className="text-center">
               <BorderPreview
                 border={demoBorders[0]}
-                size="xl"
+                size="2xl"
                 showLabel={false}
               />
               <p className="text-xs mt-1">xl</p>

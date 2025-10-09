@@ -23,6 +23,7 @@ interface BorderPreviewModalProps {
   onSelect?: (borderId: string) => void
   userAvatar?: string
   userName?: string
+  selectedBorderId?: string
 }
 
 export function BorderPreviewModal({
@@ -33,23 +34,39 @@ export function BorderPreviewModal({
   onPurchase,
   onSelect,
   userAvatar = "",
-  userName = ""
+  userName = "",
+  selectedBorderId
 }: BorderPreviewModalProps) {
   if (!border) {
     return null
   }
-
+  const isSelected = selectedBorderId === border.id
   const canAfford = border.price ? userPoints >= border.price : true
   const isFree = !border.price || border.price === 0
   const isAchievementOnly = border.price === null
 
   const getRarityColor = (rarity: string) => {
     switch (rarity.toLowerCase()) {
-      case 'common': return 'bg-gray-100 text-gray-800 border-gray-300'
-      case 'rare': return 'bg-blue-100 text-blue-800 border-blue-300'
-      case 'epic': return 'bg-purple-100 text-purple-800 border-purple-300'
-      case 'legendary': return 'bg-yellow-100 text-yellow-800 border-yellow-300'
-      default: return 'bg-gray-100 text-gray-800 border-gray-300'
+        case 'common':
+    return 'bg-gray-100 text-gray-700 border-gray-300'           
+  case 'uncommon':
+    return 'bg-emerald-100 text-emerald-700 border-emerald-300'    
+  case 'rare':
+    return 'bg-sky-100 text-sky-700 border-sky-300'               
+  case 'epic':
+    return 'bg-violet-100 text-violet-700 border-violet-300'      
+  case 'legendary':
+    return 'bg-amber-100 text-amber-700 border-amber-300'    
+  case 'mythic':
+    return 'bg-rose-100 text-rose-700 border-rose-300'          
+  case 'bronze':
+    return 'bg-amber-200/30 text-amber-800 border-amber-400'    
+  case 'silver':
+    return 'bg-zinc-100 text-zinc-600 border-zinc-300'
+  case 'gold':
+    return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+  default:
+    return 'bg-gray-100 text-gray-700 border-gray-300'
     }
   }
 
@@ -64,25 +81,29 @@ export function BorderPreviewModal({
   }
 
   const getActionText = () => {
-    if (border.unlocked) {
-      return "Pilih Border"
-    } else if (isAchievementOnly) {
-      return "Hanya Achievement"
-    } else if (isFree) {
-      return "Buka Border"
-    } else if (canAfford) {
-      return `Beli Border - ${border.price} Points`
-    } else {
-      return `Poin Tidak Cukup`
-    }
+  if (isSelected) {
+    return "Equipped"
+  } else if (border.unlocked) {
+    return "Pilih Border"
+  } else if (isAchievementOnly) {
+    return "Hanya Achievement"
+  } else if (isFree) {
+    return "Buka Border"
+  } else if (canAfford) {
+    return `Beli Border - ${border.price} Points`
+  } else {
+    return `Poin Tidak Cukup`
   }
+}
+
 
   const getActionDisabled = () => {
-    if (border.unlocked) return false
-    if (isFree) return false
-    if (isAchievementOnly) return true
-    return !canAfford
-  }
+  if (isSelected) return true
+  if (isAchievementOnly) return true
+  if (!border.unlocked && !canAfford && !isFree) return true
+  return false
+}
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -98,7 +119,7 @@ export function BorderPreviewModal({
           <div className="flex justify-center">
             <BorderPreview
               border={border}
-              size="2xl"
+              size="preborder"
               avatarSrc={userAvatar}
               avatarName={userName}
               showLabel={false}
@@ -170,32 +191,41 @@ export function BorderPreviewModal({
 
           {/* Action Button */}
           <Button
-            onClick={handleAction}
-            disabled={getActionDisabled()}
-            className="w-full"
-            variant={
-              border.unlocked
-                ? "default"
-                : isAchievementOnly
-                  ? "secondary"
-                  : canAfford
-                    ? "default"
-                    : "secondary"
-            }
-          >
-            <div className="flex items-center gap-2">
-              {border.unlocked ? (
-                <Check className="h-4 w-4" />
-              ) : isAchievementOnly ? (
-                <Star className="h-4 w-4" />
-              ) : canAfford ? (
-                <Coins className="h-4 w-4" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              <span>{getActionText()}</span>
-            </div>
-          </Button>
+  onClick={handleAction}
+  disabled={getActionDisabled()}
+  className={`w-full ${
+    isSelected
+      ? "bg-green-500 hover:bg-green-500 cursor-default" // warna hijau stabil
+      : ""
+  }`}
+  variant={
+    isSelected
+      ? "default"
+      : border.unlocked
+      ? "default"
+      : isAchievementOnly
+      ? "secondary"
+      : canAfford
+      ? "default"
+      : "secondary"
+  }
+>
+  <div className="flex items-center gap-2">
+    {isSelected ? (
+      <Check className="h-4 w-4" />
+    ) : border.unlocked ? (
+      <Check className="h-4 w-4" />
+    ) : isAchievementOnly ? (
+      <Star className="h-4 w-4" />
+    ) : canAfford ? (
+      <Coins className="h-4 w-4" />
+    ) : (
+      <Lock className="h-4 w-4" />
+    )}
+    <span>{getActionText()}</span>
+  </div>
+</Button>
+
 
           {isAchievementOnly && !border.unlocked && (
             <p className="text-xs text-center text-purple-600 font-medium">

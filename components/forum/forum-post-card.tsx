@@ -6,6 +6,7 @@ import { BorderDisplay } from "@/components/ui/border-display"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { MessageSquare, Heart, Calendar, Eye } from "lucide-react"
+import { ForumUserBorder } from "./forum-user-border"
 
 interface Author {
   name: string
@@ -13,11 +14,10 @@ interface Author {
   border: {
     id: string
     name: string
-    image: string
-    rarity: "common" | "rare" | "epic" | "legendary"
+    imageUrl: string
+    rarity: "COMMON" | "RARE" | "EPIC" | "LEGENDARY" | "MYTHIC" | "BRONZE" | "SILVER" | "GOLD"
     unlocked: boolean
   }
-  role: string
   posts: number
   joinDate: string
 }
@@ -43,6 +43,8 @@ interface ForumPostCardProps {
 
 export function ForumPostCard({ post, showFullContent = false }: ForumPostCardProps) {
   const [isHovered, setIsHovered] = useState(false)
+  console.log('🔍 ForumPostCard: Rendering post:', post.id, 'with border:', post.author?.border)
+  console.log('🔍 ForumPostCard: Author avatar:', post.author?.avatar)
 
   const getCategoryColor = (category: string) => {
     const colors: { [key: string]: string } = {
@@ -79,10 +81,10 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
             border={post.author.border}
             userAvatar={post.author.avatar}
             userName={post.author.name}
-            size="sm"
+            size="forum"
             showUserInfo={true}
             showBadge={true}
-            badgeText={post.author.role}
+            badgeText={`${post.author.border.rarity.charAt(0).toUpperCase() + post.author.border.rarity.slice(1).toLowerCase()} Member`}
             orientation="horizontal"
             className="flex-1"
           />
@@ -139,7 +141,8 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
               className={`text-xs cursor-pointer ${getCategoryColor(post.category)}`}
               onClick={() => window.location.href = `/forum?category=${post.category}`}
             >
-              {post.category.replace('-', ' ')}
+              {post.category.replace('-', ' ').charAt(0).toUpperCase() + post.category.replace('-', ' ').slice(1).toLowerCase()}
+
             </Badge>
 
             <div className="flex items-center gap-3 text-xs text-muted-foreground">

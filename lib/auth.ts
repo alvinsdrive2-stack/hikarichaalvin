@@ -5,7 +5,6 @@ import { prisma } from "./prisma"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -65,10 +64,12 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 60 * 60, // 1 hour - shorter to force more frequent refreshes
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // Initial sign in
       if (user) {
         token.role = user.role
         token.id = user.id
@@ -76,7 +77,19 @@ export const authOptions: NextAuthOptions = {
         token.bio = user.bio
         token.location = user.location
         token.selectedBorder = user.selectedBorder
+        token.name = user.name
+        return token
       }
+
+      // Handle session updates (manual updates only)
+      if (trigger === "update" && session) {
+        token.image = session.user.image
+        token.bio = session.user.bio
+        token.location = session.user.location
+        token.selectedBorder = session.user.selectedBorder
+        token.name = session.user.name
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -87,6 +100,7 @@ export const authOptions: NextAuthOptions = {
         session.user.bio = token.bio as string
         session.user.location = token.location as string
         session.user.selectedBorder = token.selectedBorder as string
+        session.user.name = token.name as string
       }
       return session
     }

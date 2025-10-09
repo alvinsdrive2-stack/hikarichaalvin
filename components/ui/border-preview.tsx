@@ -15,7 +15,7 @@ interface Border {
 
 interface BorderPreviewProps {
   border: Border
-  size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl"
+  size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "preborder" | "forum" | "threads"
   showLabel?: boolean
   showLockStatus?: boolean
   showRarity?: boolean
@@ -27,13 +27,21 @@ interface BorderPreviewProps {
 }
 
 const sizeConfig = {
-  xs: { container: "w-6 h-6", avatar: "w-4 h-4", inset: "inset-[3px]" },
-  sm: { container: "w-8 h-8", avatar: "w-5 h-5", inset: "inset-[6px]" },
-  md: { container: "w-10 h-10", avatar: "w-6 h-6", inset: "inset-[8px]" },
-  lg: { container: "w-12 h-12", avatar: "w-8 h-8", inset: "inset-[8px]" },
-  xl: { container: "w-14 h-14", avatar: "w-9 h-9", inset: "inset-[10px]" },
-  "2xl": { container: "w-18 h-18", avatar: "w-11 h-11", inset: "inset-[14px]" }
+  xs: { container: "w-6 h-6", avatar: "w-4 h-4", inset: "inset-[1px] bottom-[1px]" },
+  sm: { container: "w-8 h-8", avatar: "w-6 h-6", inset: "inset-[2px] bottom-[1px]" },
+  md: { container: "w-10 h-10", avatar: "w-7 h-7", inset: "inset-[3px] bottom-[2px]" },
+  lg: { container: "w-12 h-12", avatar: "w-9 h-9", inset: "inset-[4px] bottom-[2px]" },
+  xl: { container: "w-14 h-14", avatar: "w-10 h-10", inset: "bottom-[7px] left-[7px]" },
+  "2xl": { container: "w-18 h-18", avatar: "w-14 h-14", inset: "inset-[5px] bottom-[3px]" },
+  "3xl": { container: "w-24 h-24", avatar: "w-16 h-16", inset: "bottom-[15px] left-[15px]" },
+  preborder: { container: "w-40 h-40", avatar: "w-28 h-28", inset: "inset-[10px] bottom-[6px]" },
+  forum:{ container: "w-18 h-18", avatar: "w-13 h-13", inset: " bottom-[8px] left-[9px]" },
+  threads: { container: "w-22 h-22", avatar: "w-15 h-15", inset: "bottom-[12px] left-[13px]" }
 }
+
+
+
+
 const rarityColors = {
   default: "border-slate-400",
   common: "border-gray-400",
@@ -83,6 +91,11 @@ export function BorderPreview({
       .toUpperCase() || "U"
   }
 
+  const formatRarity = (rarity: string) => {
+    if (!rarity) return ""
+    return rarity.charAt(0).toUpperCase() + rarity.slice(1).toLowerCase()
+  }
+
   const getRarityColor = () => {
     if (!border || !border.rarity) return "" // 🛡️ safety check
     const key = border.rarity.toLowerCase() as keyof typeof rarityColors
@@ -113,7 +126,7 @@ export function BorderPreview({
           src={border.imageUrl}
           className={`absolute inset-0 w-full h-full z-20 ${showRarity && border.rarity ? `border-2 ${getRarityColor()}` : ''} overflow-visible`}
           style={{
-            objectFit: 'contain',
+            objectFit: 'cover',
             objectPosition: 'center',
             overflow: 'visible'
           }}
@@ -146,6 +159,11 @@ export function BorderPreview({
               src={avatarSrc || ""}
               alt={avatarName || ""}
               className="object-cover"
+              style={{
+                borderRadius: '50%',
+                width: '100%',
+                height: '100%'
+              }}
             />
             <AvatarFallback className={`text-xs font-medium ${size === 'xs' ? 'text-[8px]' : size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-xs' : size === 'lg' ? 'text-sm' : 'text-base'}`}>
               {getUserInitials()}
@@ -181,7 +199,7 @@ export function BorderPreview({
           )}
           {showRarity && border.rarity && (
             <Badge variant="outline" className={`text-[8px] h-4 mt-1 ${getRarityColor()}`}>
-              {border.rarity}
+              {formatRarity(border.rarity)}
             </Badge>
           )}
         </div>

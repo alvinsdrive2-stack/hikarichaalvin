@@ -50,11 +50,30 @@ export interface Activity {
 }
 
 export class DatabaseService {
+  public async getConnection() {
+    return await getConnection();
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    try {
+      const conn = await this.getConnection();
+      const [rows] = await conn.execute(
+        'SELECT id, name, email, bio, location, points, selectedBorder, image FROM user WHERE email = ?',
+        [email]
+      ) as any;
+
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Error getting user by email:', error);
+      return null;
+    }
+  }
+
   async getUserById(userId: string): Promise<User | null> {
     try {
-      const conn = await getConnection();
+      const conn = await this.getConnection();
       const [rows] = await conn.execute(
-        'SELECT id, name, email, bio, location, points, selectedBorder FROM user WHERE id = ?',
+        'SELECT id, name, email, bio, location, points, selectedBorder, image FROM user WHERE id = ?',
         [userId]
       ) as any;
 
@@ -301,6 +320,20 @@ export class DatabaseService {
       return rows;
     } catch (error) {
       console.error('Error getting user activities:', error);
+      return [];
+    }
+  }
+
+  async getAllBorders(): Promise<any[]> {
+    try {
+      const conn = await getConnection();
+      const [rows] = await conn.execute(
+        'SELECT id, name, description, imageUrl, price, rarity, isActive, sortOrder FROM border WHERE isActive = true ORDER BY sortOrder ASC, rarity ASC, name ASC'
+      ) as any;
+
+      return rows;
+    } catch (error) {
+      console.error('Error getting all borders:', error);
       return [];
     }
   }

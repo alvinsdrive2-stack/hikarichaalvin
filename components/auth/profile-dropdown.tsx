@@ -7,14 +7,50 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BorderPreview } from "@/components/ui/border-preview"
 import { useProfileRealtime } from "@/hooks/useProfileRealtime"
+import { useRealtimeSession } from "@/hooks/useRealtimeSession"
 import { User, LogOut, ShoppingBag, Coins, Star } from "lucide-react"
 
 export function ProfileDropdown() {
-  const { data: session } = useSession()
+  const { data: originalSession } = useSession()
+  const { session, fetchFreshUserData } = useRealtimeSession()
   const [isOpen, setIsOpen] = useState(false)
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string>("")
 
   // Use real-time profile hook
   const { userBorder, userPoints, fetchProfileData } = useProfileRealtime()
+
+  // Function to extract timestamp from image URL or add new one
+  const getAvatarUrlWithTimestamp = (imageUrl: string | null | undefined) => {
+    if (!imageUrl) return ""
+
+    // Check if URL already has timestamp parameter
+    const url = new URL(imageUrl, window.location.origin)
+    const existingTimestamp = url.searchParams.get('t')
+
+    if (existingTimestamp) {
+      return imageUrl
+    }
+
+    // Extract timestamp from filename if it exists (our upload format)
+    const filename = imageUrl.split('/').pop() || ''
+    const timestampMatch = filename.match(/_(\d+)\./)
+
+    if (timestampMatch) {
+      const fileTimestamp = timestampMatch[1]
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      return `${imageUrl}${separator}t=${fileTimestamp}`
+    }
+
+    // Fallback: use current timestamp only if no existing timestamp found
+    const timestamp = Date.now()
+    const separator = imageUrl.includes('?') ? '&' : '?'
+    return `${imageUrl}${separator}t=${timestamp}`
+  }
+
+  // Initialize and update avatar URL with cache busting
+  useEffect(() => {
+    setCurrentAvatarUrl(getAvatarUrlWithTimestamp(session?.user?.image))
+  }, [session?.user?.image])
 
   // Listen for profile updates from other components
   useEffect(() => {
@@ -22,17 +58,29 @@ export function ProfileDropdown() {
       fetchProfileData()
     }
 
+    // Handle avatar updates with cache busting
+    const handleAvatarUpdate = (event: CustomEvent) => {
+      if (event.detail.image) {
+        const newUrl = getAvatarUrlWithTimestamp(event.detail.image)
+        setCurrentAvatarUrl(newUrl)
+        fetchProfileData()
+        fetchFreshUserData()
+      }
+    }
+
     // Listen for custom events from profile page
     window.addEventListener('profile-updated', handleProfileUpdate)
+    window.addEventListener('profile-updated', handleAvatarUpdate as EventListener)
     window.addEventListener('border-updated', handleProfileUpdate)
     window.addEventListener('points-updated', handleProfileUpdate)
 
     return () => {
       window.removeEventListener('profile-updated', handleProfileUpdate)
+      window.removeEventListener('profile-updated', handleAvatarUpdate as EventListener)
       window.removeEventListener('border-updated', handleProfileUpdate)
       window.removeEventListener('points-updated', handleProfileUpdate)
     }
-  }, [fetchProfileData])
+  }, [fetchProfileData, fetchFreshUserData])
 
   
   if (!session) {
@@ -95,15 +143,15 @@ export function ProfileDropdown() {
         {userBorder ? (
           <BorderPreview
             border={userBorder}
-            size="lg"
-            avatarSrc={session.user?.image || ""}
+            size="xl"
+            avatarSrc={currentAvatarUrl}
             avatarName={session.user?.name || ""}
             showLabel={false}
             showLockStatus={false}
           />
         ) : (
           <Avatar className="h-10 w-10">
-            <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
+            <AvatarImage src={currentAvatarUrl} alt={session.user?.name || ""} />
             <AvatarFallback className="bg-primary text-primary-foreground font-medium">
               {userInitials}
             </AvatarFallback>
@@ -124,15 +172,15 @@ export function ProfileDropdown() {
                 {userBorder ? (
                   <BorderPreview
                     border={userBorder}
-                    size="md"
-                    avatarSrc={session.user?.image || ""}
+                    size="xl"
+                    avatarSrc={currentAvatarUrl}
                     avatarName={session.user?.name || ""}
                     showLabel={false}
                     showLockStatus={false}
                   />
                 ) : (
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
+                    <AvatarImage src={currentAvatarUrl} alt={session.user?.name || ""} />
                     <AvatarFallback className="bg-primary text-primary-foreground font-medium">
                       {userInitials}
                     </AvatarFallback>

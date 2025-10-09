@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
         email: user.email,
         bio: user.bio,
         location: user.location,
-        selectedBorder: user.selectedBorder
+        selectedBorder: user.selectedBorder,
+        image: user.image
       }
     })
 

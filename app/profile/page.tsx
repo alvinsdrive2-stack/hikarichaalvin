@@ -1,15 +1,16 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useSession, signOut } from "next-auth/react"
+import { useSession, signOut, update } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useProfileRealtime } from "@/hooks/useProfileRealtime"
+import { useRealtimeSession } from "@/hooks/useRealtimeSession"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { FlexibleAvatar } from "@/components/ui/flexible-avatar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -21,7 +22,8 @@ import { Loader2, User, MapPin, Calendar, Settings, Camera, Save, Edit2, Check, 
 
 
 export default function ProfilePage() {
-  const { data: session, status } = useSession()
+  const { data: originalSession, status, update } = useSession()
+  const { session, fetchFreshUserData } = useRealtimeSession()
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -30,6 +32,7 @@ export default function ProfilePage() {
   const [achievements, setAchievements] = useState<any[]>([])
   const [selectedBorderForModal, setSelectedBorderForModal] = useState<any>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string>("")
 
   // Form state
   const [formData, setFormData] = useState({
@@ -63,7 +66,20 @@ export default function ProfilePage() {
       fetchBorderOptions()
       fetchUserAchievements()
     }
-  }, [session, fetchProfileData])
+  }, [session?.user?.email, fetchProfileData])
+
+  // Listen for avatar updates and refresh profile data
+  useEffect(() => {
+    const handleAvatarUpdate = () => {
+      fetchProfileData()
+    }
+
+    window.addEventListener('profile-updated', handleAvatarUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('profile-updated', handleAvatarUpdate as EventListener)
+    }
+  }, [])
 
   // Listen for activities updates from real-time hook
   useEffect(() => {
@@ -76,7 +92,7 @@ export default function ProfilePage() {
     return () => {
       window.removeEventListener('activities-updated', handleActivitiesUpdate as EventListener)
     }
-  }, [])
+  }, [session])
 
   // Update form data when profile changes
   useEffect(() => {
@@ -89,6 +105,55 @@ export default function ProfilePage() {
       })
     }
   }, [profile])
+
+  // Function to extract timestamp from image URL or add new one
+  const getAvatarUrlWithTimestamp = (imageUrl: string | null | undefined) => {
+    if (!imageUrl) return ""
+
+    // Check if URL already has timestamp parameter
+    const url = new URL(imageUrl, window.location.origin)
+    const existingTimestamp = url.searchParams.get('t')
+
+    if (existingTimestamp) {
+      return imageUrl
+    }
+
+    // Extract timestamp from filename if it exists (our upload format)
+    const filename = imageUrl.split('/').pop() || ''
+    const timestampMatch = filename.match(/_(\d+)\./)
+
+    if (timestampMatch) {
+      const fileTimestamp = timestampMatch[1]
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      return `${imageUrl}${separator}t=${fileTimestamp}`
+    }
+
+    // Fallback: use current timestamp only if no existing timestamp found
+    const timestamp = Date.now()
+    const separator = imageUrl.includes('?') ? '&' : '?'
+    return `${imageUrl}${separator}t=${timestamp}`
+  }
+
+  // Initialize and update avatar URL with cache busting
+  useEffect(() => {
+    setCurrentAvatarUrl(getAvatarUrlWithTimestamp(session?.user?.image))
+  }, [session?.user?.image])
+
+  // Listen for avatar updates
+  useEffect(() => {
+    const handleAvatarUpdate = (event: CustomEvent) => {
+      if (event.detail.image) {
+        const newUrl = getAvatarUrlWithTimestamp(event.detail.image)
+        setCurrentAvatarUrl(newUrl)
+      }
+    }
+
+    window.addEventListener('profile-updated', handleAvatarUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('profile-updated', handleAvatarUpdate as EventListener)
+    }
+  }, [])
 
   const fetchUserProfile = async () => {
     try {
@@ -173,8 +238,11 @@ export default function ProfilePage() {
         // Clear the file input
         e.target.value = ''
 
-        // Refresh profile data to get updated image
+        // Refresh profile data to get updated image from database
         await fetchProfileData()
+
+        // Force refresh of realtime session data
+        await fetchFreshUserData()
 
         // Dispatch events for real-time updates across components
         window.dispatchEvent(new CustomEvent('profile-updated', { detail: { image: data.userImage } }))
@@ -424,21 +492,19 @@ export default function ProfilePage() {
                 {getSelectedBorder() ? (
                   <BorderPreview
                     border={getSelectedBorder()}
-                    size="2xl"
-                    avatarSrc={session.user?.image || ""}
+                    size="3xl"
+                    avatarSrc={currentAvatarUrl}
                     avatarName={session.user?.name || ""}
                     showLabel={false}
                     showLockStatus={false}
                   />
                 ) : (
-                  <div className="relative">
-                    <Avatar className="w-24 h-24 mx-auto">
-                      <AvatarImage src={session.user?.image || ""} alt={session.user?.name || ""} />
-                      <AvatarFallback className="text-lg">
-                        {getUserInitials()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </div>
+                  <FlexibleAvatar
+                    src={currentAvatarUrl}
+                    name={session.user?.name || ""}
+                    size="3xl"
+                    className="mx-auto"
+                  />
                 )}
                 {/* Camera Button */}
                 {isEditing && (
@@ -653,7 +719,7 @@ export default function ProfilePage() {
                         borders={borderOptions}
                         selectedBorder={getSelectedBorder()?.id || formData.selectedBorder}
                         onSelect={handleBorderSelect}
-                        size="lg"
+                        size="xl"
                         columns={3}
                         showRarity={true}
                       />
@@ -769,8 +835,9 @@ export default function ProfilePage() {
         userPoints={userPoints}
         onPurchase={handleModalPurchase}
         onSelect={handleModalSelect}
-        userAvatar={session.user?.image || ""}
+        userAvatar={currentAvatarUrl}
         userName={session.user?.name || ""}
+        selectedBorderId={getSelectedBorder()?.id || ""}
       />
     </div>
   )

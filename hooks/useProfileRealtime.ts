@@ -45,6 +45,7 @@ export function useProfileRealtime() {
         const pointsData = await pointsResponse.json()
         const activitiesData = await activitiesResponse.json()
 
+        
         // Set profile data
         setProfile(profileData.user)
 
