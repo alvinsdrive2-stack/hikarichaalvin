@@ -309,14 +309,18 @@ export function SimpleTextEditor({
           }
         `}</style>
         {/* Mode Indicator */}
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
-          <Badge variant="outline" className="text-xs">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-gradient-to-r from-green-50 to-emerald-50">
+          <Badge variant="outline" className="text-xs bg-green-100 border-green-200 text-green-700">
             <Paperclip className="h-3 w-3 mr-1" />
             Simple Mode
           </Badge>
           <div className="text-xs text-muted-foreground">
             {showCharCount && (
-              <span className={remainingChars < 50 ? 'text-orange-500' : ''}>
+              <span className={`transition-colors duration-200 ${
+                remainingChars < 20 ? 'text-red-500 font-semibold' :
+                remainingChars < 50 ? 'text-orange-500' :
+                remainingChars < 100 ? 'text-yellow-500' : ''
+              }`}>
                 {charCount}/{maxLength}
               </span>
             )}
@@ -417,10 +421,10 @@ export function SimpleTextEditor({
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || uploading}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground hover:bg-green-100 hover:text-green-600 transition-all duration-200"
             >
               {uploading ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
               ) : (
                 <Image className="h-4 w-4" />
               )}
@@ -453,9 +457,13 @@ export function SimpleTextEditor({
               size="sm"
               onClick={handleSubmit}
               disabled={disabled || uploading || (!value.trim() && images.length === 0)}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white hover:scale-105 transform transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              <Send className="h-4 w-4" />
+              {uploading ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
               {submitText}
             </Button>
           )}

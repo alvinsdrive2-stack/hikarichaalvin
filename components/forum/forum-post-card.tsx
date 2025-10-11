@@ -43,6 +43,7 @@ interface ForumPostCardProps {
 
 export function ForumPostCard({ post, showFullContent = false }: ForumPostCardProps) {
   const [isHovered, setIsHovered] = useState(false)
+  const [isLiked, setIsLiked] = useState(false)
   console.log('🔍 ForumPostCard: Rendering post:', post.id, 'with border:', post.author?.border)
   console.log('🔍 ForumPostCard: Author avatar:', post.author?.avatar)
 
@@ -68,9 +69,9 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
 
   return (
     <Card
-      className={`hover:shadow-lg transition-all duration-300 ${isHovered ? 'scale-[1.02]' : ''} ${
-        post.isPinned ? 'ring-2 ring-yellow-400 border-yellow-200' : ''
-      }`}
+      className={`hover:shadow-lg transition-all duration-300 ${isHovered ? 'scale-[1.02] -translate-y-1' : ''} ${
+        post.isPinned ? 'ring-2 ring-yellow-400 border-yellow-200 bg-yellow-50/30' : ''
+      } cursor-pointer group`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -92,7 +93,7 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
           {/* Post Status */}
           <div className="flex items-center gap-2 ml-4">
             {post.isPinned && (
-              <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-700">
+              <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-700 animate-pulse">
                 📌 Ditandai
               </Badge>
             )}
@@ -119,7 +120,7 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
         {/* Post Title */}
         <div className="mb-3">
           <Link href={`/forum/thread/${post.id}`}>
-            <h3 className={`font-semibold text-lg hover:text-blue-600 transition-colors ${
+            <h3 className={`font-semibold text-lg hover:text-blue-600 transition-colors group-hover:text-blue-700 ${
               post.isPinned ? 'text-yellow-700' : ''
             }`}>
               {post.isPinned && '📌 '}
@@ -128,7 +129,7 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
           </Link>
 
           {post.excerpt && (
-            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+            <p className="text-sm text-muted-foreground mt-2 line-clamp-2 group-hover:text-foreground transition-colors duration-200">
               {post.excerpt}
             </p>
           )}
@@ -163,7 +164,7 @@ export function ForumPostCard({ post, showFullContent = false }: ForumPostCardPr
 
           <Link
             href={`/forum/thread/${post.id}`}
-            className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+            className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium group-hover:text-blue-700 transition-all duration-200 group-hover:translate-x-1 transform inline-block"
           >
             Baca →
           </Link>
@@ -198,13 +199,13 @@ export function ForumPostList({ posts, showCategoryFilter = false }: ForumPostLi
   return (
     <div className="space-y-4">
       {showCategoryFilter && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap mb-6">
           <button
             onClick={() => setSelectedCategory("all")}
-            className={`px-3 py-1 rounded-md text-sm transition-colors ${
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:scale-105 transform ${
               selectedCategory === "all"
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary hover:bg-secondary/80"
+                ? "bg-primary text-primary-foreground shadow-lg"
+                : "bg-secondary hover:bg-secondary/80 hover:shadow-md"
             }`}
           >
             Semua
@@ -213,13 +214,13 @@ export function ForumPostList({ posts, showCategoryFilter = false }: ForumPostLi
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`px-3 py-1 rounded-md text-sm transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:scale-105 transform ${
                 selectedCategory === category
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary hover:bg-secondary/80"
+                  ? "bg-primary text-primary-foreground shadow-lg"
+                  : "bg-secondary hover:bg-secondary/80 hover:shadow-md"
               }`}
             >
-              {category.replace('-', ' ')}
+              {category.replace('-', ' ').charAt(0).toUpperCase() + category.replace('-', ' ').slice(1)}
             </button>
           ))}
         </div>

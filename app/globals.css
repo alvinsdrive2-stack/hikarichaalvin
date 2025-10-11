@@ -144,7 +144,7 @@
   }
 }
 
-/* Button cursor styles */
+/* Button cursor styles and UX improvements */
 @layer utilities {
   .btn-pointer {
     @apply cursor-pointer;
@@ -163,4 +163,64 @@
   a, [onclick], [data-testid*="button"], [data-testid*="trigger"] {
     @apply cursor-pointer;
   }
+
+  /* Enhanced button hover states */
+  .btn-hover-lift {
+    @apply transition-all duration-200 hover:scale-105 hover:-translate-y-1 hover:shadow-lg;
+  }
+
+  .btn-hover-shine {
+    @apply relative overflow-hidden transition-all duration-200 hover:scale-105;
+  }
+
+  .btn-hover-shine::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .btn-hover-shine:hover::before {
+    left: 100%;
+  }
+
+  /* Smooth transitions for interactive elements */
+  .interactive-smooth {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  /* Loading skeleton animation */
+  .skeleton-loading {
+    @apply animate-pulse bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200;
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  /* Card hover effects */
+  .card-hover-lift {
+    @apply transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl;
+  }
+
+  /* Focus states for accessibility */
+  .focus-ring-sm {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white;
+  }
+
+  .focus-ring-md {
+    @apply focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white;
+  }
+}
+
+/* Custom shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
 }
