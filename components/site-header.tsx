@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { ShoppingCart, User, Users, Bell, Trophy } from "lucide-react"
+import { ShoppingCart, User, Users, Bell, Trophy, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useCart } from "@/components/cart-provider"
@@ -62,6 +62,14 @@ export function SiteHeader() {
         </button>
 
         <ul className="hidden md:flex items-center gap-6">
+          {session && (
+            <li>
+              <Link href="/social" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform hover:shadow-md">
+                <Home className="size-4" />
+                <span className="hidden sm:inline">Social</span>
+              </Link>
+            </li>
+          )}
           <li>
             <Link href="/forum" className="px-3 py-2 rounded-md hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform">
               Forum
@@ -122,6 +130,14 @@ export function SiteHeader() {
       {open && (
         <div className="md:hidden border-t bg-background/95 backdrop-blur animate-in slide-in-from-top-2 duration-300">
           <ul className="px-4 py-3 flex flex-col gap-3">
+            {session && (
+              <li>
+                <Link href="/social" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+                  <Home className="size-4" />
+                  <span>Social</span>
+                </Link>
+              </li>
+            )}
             <li>
               <Link href="/forum" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
                 Forum
