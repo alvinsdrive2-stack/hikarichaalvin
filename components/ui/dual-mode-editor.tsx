@@ -41,65 +41,14 @@ export function DualModeEditor({
   simpleModeProps = {},
   disabled = false
 }: DualModeEditorProps) {
-  const [internalMode, setInternalMode] = useState<"rich" | "simple">("simple")
-  const [mode, setMode] = useState<"rich" | "simple" | "choice">(propMode)
-
-  // Extract and track images from the HTML value
-  const [extractedImages, setExtractedImages] = useState<string[]>(() => {
-    return extractImagesFromHtml(value)
-  })
-
-  // Update mode when propMode changes
-  useEffect(() => {
-    setMode(propMode)
-  }, [propMode])
-
-  // Update extracted images when value changes
-  useEffect(() => {
-    const newImages = extractImagesFromHtml(value)
-    setExtractedImages(newImages)
-  }, [value])
-
-  const isModeChoice = mode === "choice"
-  const currentMode = isModeChoice ? internalMode : mode
-
-  const handleModeSelect = (selectedMode: "rich" | "simple") => {
-    if (isModeChoice) {
-      setInternalMode(selectedMode)
-    } else {
-      setMode(selectedMode)
-    }
-    onModeChange?.(selectedMode)
+  // Helper functions - define them first to avoid hoisting issues
+  const extractImagesFromHtml = (html: string): string[] => {
+    const temp = document.createElement('div')
+    temp.innerHTML = html
+    const images = Array.from(temp.querySelectorAll('img'))
+    return images.map(img => img.src || img.getAttribute('src') || '')
   }
 
-  // Convert simple content to HTML for storage
-  const handleSimpleChange = (text: string) => {
-    const { images = [] } = simpleModeProps
-
-    // Basic WhatsApp-style formatting
-    let formattedText = text
-    formattedText = formattedText.replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
-    formattedText = formattedText.replace(/_([^_]+)_/g, '<em>$1</em>')
-    formattedText = formattedText.replace(/~([^~]+)~/g, '<s>$1</s>')
-    formattedText = formattedText.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
-
-    // Convert line breaks
-    formattedText = formattedText.replace(/\n/g, '<br>')
-
-    // Add images at the beginning - use extractedImages from current state + new images
-    const allImages = [...extractedImages, ...images]
-    let finalContent = formattedText
-    if (allImages.length > 0) {
-      const imageHtml = allImages.map(img =>
-        `<img src="${img}" alt="Shared image" class="max-w-full rounded-lg shadow-sm my-2" style="display: block; margin: 8px 0;" />`
-      ).join('')
-      finalContent = imageHtml + '<br>' + formattedText
-    }
-
-    onChange(finalContent)
-  }
-
-  // Extract text from HTML for simple mode
   const extractTextFromHtml = (html: string): string => {
     const temp = document.createElement('div')
     temp.innerHTML = html
@@ -113,14 +62,100 @@ export function DualModeEditor({
     return text.replace(/<br>/g, '\n')
   }
 
-  // Extract images from HTML
-  const extractImagesFromHtml = (html: string): string[] => {
-    const temp = document.createElement('div')
-    temp.innerHTML = html
-    const images = Array.from(temp.querySelectorAll('img'))
-    return images.map(img => img.src || img.getAttribute('src') || '')
+  const [internalMode, setInternalMode] = useState<"rich" | "simple">("simple")
+  const [mode, setMode] = useState<"rich" | "simple" | "choice">(propMode)
+
+  // Extract and track images from the HTML value
+  const [extractedImages, setExtractedImages] = useState<string[]>(() => {
+    return extractImagesFromHtml(value)
+  })
+  const [uploadedImages, setUploadedImages] = useState<string[]>([])
+
+  // Update mode when propMode changes
+  useEffect(() => {
+    setMode(propMode)
+  }, [propMode])
+
+  const isModeChoice = mode === "choice"
+  const currentMode = isModeChoice ? internalMode : mode
+
+  // Update extracted images when value changes (but only for Rich Text mode)
+  useEffect(() => {
+    // Only extract images in Rich Text mode to avoid interference with Simple Mode
+    if (currentMode === 'rich' || mode === 'rich') {
+      const newImages = extractImagesFromHtml(value)
+      // Only update if there's a change to avoid infinite loops
+      if (JSON.stringify(newImages) !== JSON.stringify(extractedImages)) {
+        setExtractedImages(newImages)
+      }
+    }
+  }, [value, currentMode, mode])
+
+  const handleModeSelect = (selectedMode: "rich" | "simple") => {
+    if (isModeChoice) {
+      setInternalMode(selectedMode)
+    } else {
+      setMode(selectedMode)
+    }
+    onModeChange?.(selectedMode)
   }
 
+  // Convert simple content to HTML for storage
+  const handleSimpleChange = (text: string, skipImageProcessing = false) => {
+    const { images = [] } = simpleModeProps
+
+    console.log('🔧 handleSimpleChange called:', {
+      text: text.substring(0, 50) + '...',
+      skipImageProcessing,
+      imagesCount: images.length,
+      uploadedImagesCount: uploadedImages.length,
+      extractedImagesCount: extractedImages.length
+    })
+
+    // Basic WhatsApp-style formatting
+    let formattedText = text
+    formattedText = formattedText.replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
+    formattedText = formattedText.replace(/_([^_]+)_/g, '<em>$1</em>')
+    formattedText = formattedText.replace(/~([^~]+)~/g, '<s>$1</s>')
+    formattedText = formattedText.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
+
+    // Convert line breaks
+    formattedText = formattedText.replace(/\n/g, '<br>')
+
+    // Only process images if not skipping (to avoid infinite loops)
+    let finalContent = formattedText
+    if (!skipImageProcessing) {
+      // CRITICAL FIX: Only use uploadedImages for Simple Mode
+      // NEVER use extractedImages as they cause duplication
+      const allImageSources = [
+        ...uploadedImages,  // Images uploaded via SimpleTextEditor ONLY
+        ...images           // Images from simpleModeProps (should be empty in most cases)
+      ]
+
+      console.log('🖼️ All image sources before dedup:', allImageSources)
+
+      // Remove duplicates using Set
+      const uniqueImages = [...new Set(allImageSources)]
+
+      console.log('✅ Unique images after dedup:', uniqueImages)
+
+      if (uniqueImages.length > 0) {
+        const imageHtml = uniqueImages.map(img =>
+          `<img src="${img}" alt="Shared image" class="max-w-full rounded-lg shadow-sm my-2" style="display: block; margin: 8px 0;" />`
+        ).join('')
+        finalContent = imageHtml + '<br>' + formattedText
+
+        console.log('📝 Final content length with images:', finalContent.length)
+      }
+    } else {
+      console.log('⏭️ Skipping image processing as requested')
+    }
+
+    console.log('📤 Calling onChange with final content length:', finalContent.length)
+    onChange(finalContent)
+  }
+
+  
   // Mode choice screen
   if (isModeChoice) {
     return (
@@ -280,8 +315,32 @@ export function DualModeEditor({
         onImageUpload={(newImages) => {
           console.log('🖼️ New images uploaded:', newImages)
           console.log('📷 Current extracted images:', extractedImages)
-          const currentText = extractTextFromHtml(value)
-          handleSimpleChange(currentText)
+          console.log('📁 Current uploaded images:', uploadedImages)
+
+          // Filter out images that are already uploaded to avoid duplicates
+          const filteredNewImages = newImages.filter(img =>
+            !uploadedImages.includes(img) && !extractedImages.includes(img)
+          )
+
+          console.log('🔍 Filtered new images:', filteredNewImages)
+
+          if (filteredNewImages.length > 0) {
+            console.log('✅ Adding images to uploadedImages state')
+
+            // Add only new images to uploadedImages state
+            setUploadedImages(prev => {
+              const updated = [...prev, ...filteredNewImages]
+              console.log('📊 Updated uploadedImages state:', updated)
+              return updated
+            })
+
+            // Update content to include new images (skip image processing to avoid infinite loop)
+            const currentText = extractTextFromHtml(value)
+            console.log('📝 Updating content with current text:', currentText.substring(0, 50) + '...')
+            handleSimpleChange(currentText, true) // Skip image processing
+          } else {
+            console.log('⚠️ No new images to add (all duplicates)')
+          }
         }}
         showSubmitButton={false}
         maxLength={2000}

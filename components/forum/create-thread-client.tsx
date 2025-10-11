@@ -40,7 +40,7 @@ export function CreateThreadClient({ session }: CreateThreadClientProps) {
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [editorMode, setEditorMode] = useState<"edit" | "preview">("edit")
-  const [editorType, setEditorType] = useState<"rich" | "simple" | "choice">("choice")
+  const [editorType, setEditorType] = useState<"rich" | "simple" | "choice">("simple")
 
   useEffect(() => {
     fetchCategories()
@@ -255,9 +255,9 @@ export function CreateThreadClient({ session }: CreateThreadClientProps) {
                 onModeChange={(mode) => setEditorType(mode)}
                 placeholder={
                   editorType === "simple"
-                    ? "Tulis pertanyaan atau diskusi Anda... (WhatsApp style)"
+                    ? "Tulis pertanyaan atau diskusi Anda... Upload foto mudah seperti WhatsApp!"
                     : editorType === "rich"
-                    ? "Tuliskan pertanyaan atau diskusi Anda secara detail. Semakin jelas, semakin baik respon yang Anda dapatkan. Gunakan rich text formatting untuk membuat postingan lebih menarik!"
+                    ? "Tuliskan pertanyaan atau diskusi Anda secara detail. Semakin jelas, semakin baik respon yang Anda dapatkan. Gunakan rich text formatting untuk membuat postingan lebih menarik! Klik ikon gambar 🖼️ untuk upload foto."
                     : "Pilih mode editor di bawah..."
                 }
                 height={editorType === "simple" ? 150 : 300}

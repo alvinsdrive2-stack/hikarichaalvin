@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise'
+import { onForumThreadCreated, onForumCommentCreated, onCommentLiked } from './achievements'
 
 interface Category {
   id: number
@@ -259,7 +260,7 @@ export async function createThread(data: {
   const connection = await mysql.createConnection(dbConfig)
 
   try {
-    const threadId = `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const threadId = `thread_${Date.now()}`
 
     await connection.execute(`
       INSERT INTO forum_threads (
@@ -274,6 +275,13 @@ export async function createThread(data: {
       data.category_id,
       data.author_id
     ])
+
+    // Track achievement progress
+    try {
+      await onForumThreadCreated(data.author_id)
+    } catch (error) {
+      console.error('Error tracking forum thread achievement:', error)
+    }
 
     return threadId
   } finally {
@@ -290,7 +298,7 @@ export async function createReply(data: {
   const connection = await mysql.createConnection(dbConfig)
 
   try {
-    const replyId = `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const replyId = `reply_${Date.now()}`
 
     // Debug logging
     console.log('🔍 Debug createReply data:', {
@@ -332,7 +340,15 @@ export async function createReply(data: {
       `, [data.author_id, data.thread_id])
 
       await connection.query('COMMIT')
-      return replyId
+
+    // Track achievement progress
+    try {
+      await onForumCommentCreated(data.author_id)
+    } catch (error) {
+      console.error('Error tracking forum comment achievement:', error)
+    }
+
+    return replyId
     } catch (error) {
       await connection.query('ROLLBACK')
       throw error
@@ -387,6 +403,25 @@ export async function likeContent(userId: string, contentId: string, contentType
       }
 
       await connection.query('COMMIT')
+
+      // Track achievement progress for comment likes
+      if (!isLiked && contentType === 'reply') {
+        try {
+          // Get the author of the reply that was liked
+          const [replyRows] = await connection.execute(
+            'SELECT author_id FROM forum_replies WHERE id = ?',
+            [contentId]
+          )
+
+          if (replyRows.length > 0) {
+            const replyAuthorId = replyRows[0].author_id
+            await onCommentLiked(replyAuthorId)
+          }
+        } catch (error) {
+          console.error('Error tracking comment like achievement:', error)
+        }
+      }
+
       return !isLiked // Return new like status (true = liked, false = unliked)
     } catch (error) {
       await connection.query('ROLLBACK')

@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BorderPreview } from "@/components/ui/border-preview"
 import { useProfileRealtime } from "@/hooks/useProfileRealtime"
 import { useRealtimeSession } from "@/hooks/useRealtimeSession"
-import { User, LogOut, ShoppingBag, Coins, Star } from "lucide-react"
+import { User, LogOut, ShoppingBag, Coins, Star, Trophy } from "lucide-react"
 
 export function ProfileDropdown() {
   const { data: originalSession } = useSession()
@@ -253,6 +253,14 @@ export function ProfileDropdown() {
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span>Pesanan Saya</span>
+              </button>
+
+              <button
+                className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-3 text-sm"
+                onClick={() => window.location.href = '/achievements'}
+              >
+                <Trophy className="h-4 w-4" />
+                <span>Achievements</span>
               </button>
 
               <div className="border-t border-border my-1"></div>

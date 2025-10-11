@@ -50,15 +50,9 @@ export function UserAchievements({ userId, className = "" }: UserAchievementsPro
         return <MessageSquare className="h-3 w-3" />
       case 'FORUM_REGULAR':
         return <MessageSquare className="h-3 w-3" />
-      case 'RECIPE_CREATOR':
-        return <Trophy className="h-3 w-3" />
       case 'SOCIAL_BUTTERFLY':
         return <MessageSquare className="h-3 w-3" />
-      case 'EXPLORER':
-        return <Calendar className="h-3 w-3" />
       case 'EARLY_ADOPTER':
-        return <Trophy className="h-3 w-3" />
-      case 'PURCHASE_MASTER':
         return <Trophy className="h-3 w-3" />
       case 'BORDER_COLLECTOR':
         return <Trophy className="h-3 w-3" />
@@ -66,14 +60,18 @@ export function UserAchievements({ userId, className = "" }: UserAchievementsPro
         return <Trophy className="h-3 w-3" />
       case 'DAILY_VISITOR':
         return <Calendar className="h-3 w-3" />
-      case 'RECIPE_MASTER':
-        return <Trophy className="h-3 w-3" />
       case 'FORUM_EXPERT':
         return <MessageSquare className="h-3 w-3" />
       case 'COMMENTATOR_PRO':
         return <MessageSquare className="h-3 w-3" />
       case 'ACTIVE_MEMBER':
+        return <Calendar className="h-3 w-3" />
+      case 'FRIEND_CONNECTOR':
+        return <Trophy className="h-3 w-3" />
+      case 'DISCUSSION_STARTER':
         return <MessageSquare className="h-3 w-3" />
+      case 'HELPFUL_MEMBER':
+        return <Trophy className="h-3 w-3" />
       default:
         return <Trophy className="h-3 w-3" />
     }

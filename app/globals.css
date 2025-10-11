@@ -143,3 +143,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Button cursor styles */
+@layer utilities {
+  .btn-pointer {
+    @apply cursor-pointer;
+  }
+
+  .btn-pointer:hover {
+    @apply cursor-pointer;
+  }
+
+  /* Force pointer cursor on all interactive elements */
+  button, .btn, [role="button"], input[type="button"], input[type="submit"] {
+    @apply cursor-pointer;
+  }
+
+  /* Ensure all clickable elements have pointer cursor */
+  a, [onclick], [data-testid*="button"], [data-testid*="trigger"] {
+    @apply cursor-pointer;
+  }
+}

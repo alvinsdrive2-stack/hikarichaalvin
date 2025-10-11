@@ -1,6 +1,24 @@
-import { prisma } from "./prisma"
-import { AchievementType, BorderRarity } from "@prisma/client"
+import { dbService } from "./db-raw"
 import { borderService } from "./border-service"
+
+// Achievement types (mimicking enum from Prisma)
+export type AchievementType =
+  | "FIRST_FORUM_POST"
+  | "FORUM_REGULAR"
+  | "RECIPE_CREATOR"
+  | "SOCIAL_BUTTERFLY"
+  | "EARLY_ADOPTER"
+  | "PURCHASE_MASTER"
+  | "BORDER_COLLECTOR"
+  | "POINTS_COLLECTOR"
+  | "DAILY_VISITOR"
+  | "RECIPE_MASTER"
+  | "FORUM_EXPERT"
+  | "COMMENTATOR_PRO"
+  | "ACTIVE_MEMBER"
+  | "FRIEND_CONNECTOR"
+  | "HELPFUL_MEMBER"
+  | "DISCUSSION_STARTER"
 
 export interface AchievementConfig {
   type: AchievementType
@@ -36,16 +54,6 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     }
   },
   {
-    type: "RECIPE_CREATOR",
-    title: "Koki Creative",
-    description: "Buat 5 resep baru",
-    targetValue: 5,
-    rewards: {
-      points: 30,
-      borderUnlocks: ["Gold"]
-    }
-  },
-  {
     type: "SOCIAL_BUTTERFLY",
     title: "Pendengar Baik",
     description: "Buat 20 komentar di forum",
@@ -63,16 +71,6 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     rewards: {
       points: 25,
       borderUnlocks: ["Bronze"]
-    }
-  },
-  {
-    type: "PURCHASE_MASTER",
-    title: "Pembeli Setia",
-    description: "Lakukan 5 pembelian",
-    targetValue: 5,
-    rewards: {
-      points: 75,
-      borderUnlocks: ["Gold"]
     }
   },
   {
@@ -106,16 +104,6 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
     }
   },
   {
-    type: "RECIPE_MASTER",
-    title: "Recipe Master",
-    description: "Buat 25 resep",
-    targetValue: 25,
-    rewards: {
-      points: 150,
-      borderUnlocks: ["Crystal"]
-    }
-  },
-  {
     type: "FORUM_EXPERT",
     title: "Forum Expert",
     description: "Buat 100 postingan forum",
@@ -144,37 +132,113 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig[] = [
       points: 100,
       borderUnlocks: ["Gold"]
     }
+  },
+  // New forum-specific achievements
+  {
+    type: "FRIEND_CONNECTOR",
+    title: "Konektor Pertemanan",
+    description: "Buat 5 koneksi pertemanan",
+    targetValue: 5,
+    rewards: {
+      points: 30,
+      borderUnlocks: ["Silver"]
+    }
+  },
+  {
+    type: "DISCUSSION_STARTER",
+    title: "Pemdiskusi",
+    description: "Buat 10 thread diskusi baru",
+    targetValue: 10,
+    rewards: {
+      points: 60,
+      borderUnlocks: ["Gold"]
+    }
+  },
+  {
+    type: "HELPFUL_MEMBER",
+    title: "Anggota Bermanfaat",
+    description: "Dapatkan 50 like di komentar",
+    targetValue: 50,
+    rewards: {
+      points: 80,
+      borderUnlocks: ["Crystal"]
+    }
   }
 ]
 
 export async function initializeAchievementsForUser(userId: string) {
-  const achievements = await Promise.all(
-    ACHIEVEMENTS_CONFIG.map(async (config) => {
-      return await prisma.achievement.upsert({
-        where: {
-          userId_type: {
-            userId,
-            type: config.type
-          }
-        },
-        update: {},
-        create: {
-          id: `ach_${userId}_${config.type}`,
+  try {
+    console.log('🏆 Initializing achievements for userId:', userId)
+    const achievements = []
+    const conn = await dbService.getConnection()
+
+    for (const config of ACHIEVEMENTS_CONFIG) {
+      const achievementId = `ach_${userId}_${config.type}`
+      console.log('🎯 Processing achievement:', { achievementId, userId, type: config.type })
+
+      try {
+        // Use INSERT IGNORE to handle race conditions gracefully
+        const result = await conn.execute(`
+          INSERT IGNORE INTO achievement (
+            id, userId, type, title, description,
+            targetValue, currentValue, isCompleted,
+            rewards, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `, [
+          achievementId,
+          userId,
+          config.type,
+          config.title,
+          config.description,
+          config.targetValue,
+          0,
+          false,
+          JSON.stringify(config.rewards)
+        ])
+
+        console.log('✅ Achievement insert result:', {
+          achievementId,
+          affectedRows: (result as any).affectedRows
+        })
+
+      } catch (insertError: any) {
+        // Log detailed error for debugging
+        console.error('❌ Achievement insert failed:', {
+          achievementId,
           userId,
           type: config.type,
-          title: config.title,
-          description: config.description,
-          targetValue: config.targetValue,
-          currentValue: 0,
-          isCompleted: false,
-          rewards: JSON.stringify(config.rewards),
-          updatedAt: new Date()
-        }
-      })
-    })
-  )
+          error: insertError.message,
+          sqlState: insertError.sqlState,
+          errno: insertError.errno
+        })
 
-  return achievements
+        // If it's a duplicate key error, continue gracefully
+        if (insertError.errno === 1062) {
+          console.log('⚠️ Duplicate achievement detected, continuing...')
+          continue
+        }
+
+        // For other errors, re-throw
+        throw insertError
+      }
+
+      achievements.push({
+        id: achievementId,
+        type: config.type,
+        title: config.title,
+        description: config.description,
+        targetValue: config.targetValue,
+        currentValue: 0,
+        isCompleted: false
+      })
+    }
+
+    console.log('🏅 Achievements initialization completed for userId:', userId)
+    return achievements
+  } catch (error) {
+    console.error('💥 Error initializing achievements for userId:', userId, error)
+    return []
+  }
 }
 
 export async function updateAchievementProgress(
@@ -185,134 +249,244 @@ export async function updateAchievementProgress(
   const config = ACHIEVEMENTS_CONFIG.find(a => a.type === type)
   if (!config) return null
 
-  const achievement = await prisma.achievement.findUnique({
-    where: {
-      userId_type: {
-        userId,
-        type
+  try {
+    const achievementId = `ach_${userId}_${type}`
+    const conn = await dbService.getConnection()
+
+    // Get current achievement - also try to find by userId and type as fallback
+    let achievementRows = await conn.execute(
+      'SELECT * FROM achievement WHERE id = ?',
+      [achievementId]
+    ) as any
+
+    // Fallback: check by userId and type combination (more robust)
+    if (!achievementRows.length) {
+      achievementRows = await conn.execute(
+        'SELECT * FROM achievement WHERE userId = ? AND type = ?',
+        [userId, type]
+      ) as any
+    }
+
+    if (!achievementRows.length) {
+      console.log(`⚠️ Achievement not found for userId: ${userId}, type: ${type}. Initializing...`)
+      // Initialize this specific achievement only
+      try {
+        await conn.execute(`
+          INSERT IGNORE INTO achievement (
+            id, userId, type, title, description,
+            targetValue, currentValue, isCompleted,
+            rewards, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `, [
+          achievementId,
+          userId,
+          config.type,
+          config.title,
+          config.description,
+          config.targetValue,
+          0,
+          false,
+          JSON.stringify(config.rewards)
+        ])
+
+        // Try to get it again
+        const newRows = await conn.execute(
+          'SELECT * FROM achievement WHERE id = ?',
+          [achievementId]
+        ) as any
+        achievementRows = newRows
+
+        if (!achievementRows.length) {
+          console.error(`❌ Failed to create achievement for userId: ${userId}, type: ${type}`)
+          return null
+        }
+      } catch (error) {
+        console.error(`❌ Error creating achievement for userId: ${userId}, type: ${type}`, error)
+        return null
       }
     }
-  })
 
-  if (!achievement) {
-    // Initialize achievement if it doesn't exist
-    await initializeAchievementsForUser(userId)
-    return updateAchievementProgress(userId, type, increment)
-  }
+    const achievement = achievementRows[0]
 
-  if (achievement.isCompleted) return achievement
+    if (achievement.isCompleted) return achievement
 
-  const newCurrentValue = Math.min(achievement.currentValue + increment, config.targetValue)
-  const isCompleted = newCurrentValue >= config.targetValue
+    const newCurrentValue = Math.min(achievement.currentValue + increment, config.targetValue)
+    const isCompleted = newCurrentValue >= config.targetValue
 
-  const updatedAchievement = await prisma.achievement.update({
-    where: {
-      userId_type: {
+    // Update achievement progress
+    await conn.execute(`
+      UPDATE achievement
+      SET currentValue = ?, isCompleted = ?, completedAt = ?, updatedAt = NOW()
+      WHERE id = ?
+    `, [newCurrentValue, isCompleted, isCompleted ? new Date() : null, achievementId])
+
+    // If achievement is completed, give rewards
+    if (isCompleted && !achievement.isCompleted) {
+      await grantAchievementRewards(userId, config)
+
+      // Log activity
+      await conn.execute(`
+        INSERT INTO activities (userId, type, title, description, createdAt)
+        VALUES (?, ?, ?, ?, NOW())
+      `, [
         userId,
-        type
-      }
-    },
-    data: {
+        "BADGE_EARNED",
+        `Achievement Unlocked: ${config.title}`,
+        config.description
+      ])
+    }
+
+    return {
+      ...achievement,
       currentValue: newCurrentValue,
       isCompleted,
       completedAt: isCompleted ? new Date() : null
     }
-  })
-
-  // If achievement is completed, give rewards
-  if (isCompleted && !achievement.isCompleted) {
-    await grantAchievementRewards(userId, config)
-
-    // Log activity
-    await prisma.activity.create({
-      data: {
-        userId,
-        type: "BADGE_EARNED",
-        title: `Achievement Unlocked: ${config.title}`,
-        description: config.description
-      }
-    })
+  } catch (error) {
+    console.error('Error updating achievement progress:', error)
+    return null
   }
-
-  return updatedAchievement
 }
 
 export async function grantAchievementRewards(userId: string, config: AchievementConfig) {
-  // Grant points using border service
-  if (config.rewards.points) {
-    await borderService.addPoints({
-      userId,
-      type: 'EARNED',
-      amount: config.rewards.points,
-      description: `Achievement reward: ${config.title}`,
-      metadata: {
-        achievementType: config.type,
-        achievementTitle: config.title
-      }
-    })
-  }
-
-  // Unlock borders using border service
-  if (config.rewards.borderUnlocks) {
-    await Promise.all(
-      config.rewards.borderUnlocks.map(async (borderName) => {
-        // Find the border in database
-        const border = await prisma.border.findUnique({
-          where: { name: borderName }
-        })
-
-        if (border) {
-          await borderService.unlockBorderViaAchievement(userId, border.id, config.type)
+  try {
+    // Grant points using border service
+    if (config.rewards.points) {
+      await borderService.addPoints({
+        userId,
+        type: 'EARNED',
+        amount: config.rewards.points,
+        description: `Achievement reward: ${config.title}`,
+        metadata: {
+          achievementType: config.type,
+          achievementTitle: config.title
         }
       })
-    )
-  }
+    }
 
-  // Grant badges (could be implemented later)
-  if (config.rewards.badges) {
-    // TODO: Implement badge system
+    // Unlock borders using border service
+    if (config.rewards.borderUnlocks) {
+      await Promise.all(
+        config.rewards.borderUnlocks.map(async (borderName) => {
+          // Find the border in database
+          const conn = await dbService.getConnection()
+          const [borderRows] = await conn.execute(
+            'SELECT id FROM border WHERE name = ?',
+            [borderName]
+          ) as any
+
+          if (borderRows.length > 0) {
+            const border = borderRows[0]
+            await borderService.unlockBorderViaAchievement(userId, border.id, config.type)
+          }
+        })
+      )
+    }
+
+    // Grant badges (could be implemented later)
+    if (config.rewards.badges) {
+      // TODO: Implement badge system
+    }
+  } catch (error) {
+    console.error('Error granting achievement rewards:', error)
   }
 }
 
 export async function getUserAchievements(userId: string) {
-  return await prisma.achievement.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'asc' }
-  })
+  try {
+    const conn = await dbService.getConnection()
+    const [rows] = await conn.execute(
+      'SELECT * FROM achievement WHERE userId = ? ORDER BY createdAt ASC',
+      [userId]
+    ) as any
+    return rows
+  } catch (error) {
+    console.error('Error getting user achievements:', error)
+    return []
+  }
 }
 
 export async function getUserUnlockedBorders(userId: string) {
-  // Use border service instead of old ProfileBorder model
-  const borders = await borderService.getAllBordersWithUnlockStatus(userId)
+  try {
+    // Use border service instead of old ProfileBorder model
+    const borders = await borderService.getAllBordersWithUnlockStatus(userId)
 
-  // Return only unlocked borders
-  return borders.filter(border => border.unlocked)
+    // Return only unlocked borders
+    return borders.filter(border => border.unlocked)
+  } catch (error) {
+    console.error('Error getting user unlocked borders:', error)
+    return []
+  }
 }
 
 export async function trackActivity(userId: string, activityType: string, increment: number = 1) {
-  // Map activity types to achievement types
-  const activityToAchievementMap: { [key: string]: AchievementType } = {
-    'FORUM_POST': 'FORUM_REGULAR',
-    'FORUM_COMMENT': 'SOCIAL_BUTTERFLY',
-    'RECIPE_CREATED': 'RECIPE_CREATOR',
-    'PROFILE_UPDATE': 'ACTIVE_MEMBER',
-    'PURCHASE': 'PURCHASE_MASTER'
-  }
+  try {
+    // Map activity types to achievement types
+    const activityToAchievementMap: { [key: string]: AchievementType } = {
+      'FORUM_POST': 'FORUM_REGULAR',
+      'FORUM_COMMENT': 'SOCIAL_BUTTERFLY',
+      'FORUM_THREAD_CREATED': 'DISCUSSION_STARTER',
+      'FRIEND_ADDED': 'FRIEND_CONNECTOR',
+      'COMMENT_LIKED': 'HELPFUL_MEMBER',
+      'PROFILE_UPDATE': 'ACTIVE_MEMBER',
+      'USER_REGISTERED': 'EARLY_ADOPTER'
+    }
 
-  const achievementType = activityToAchievementMap[activityType]
-  if (achievementType) {
-    await updateAchievementProgress(userId, achievementType, increment)
-  }
+    const achievementType = activityToAchievementMap[activityType]
+    if (achievementType) {
+      await updateAchievementProgress(userId, achievementType, increment)
+    }
 
-  // Track border collector achievement
-  if (activityType === 'BADGE_EARNED') {
-    const userBorders = await getUserUnlockedBorders(userId)
-    await updateAchievementProgress(userId, 'BORDER_COLLECTOR', userBorders.length)
-  }
+    // Special handling for first forum post
+    if (activityType === 'FORUM_POST') {
+      const conn = await dbService.getConnection()
+      const [existingPosts] = await conn.execute(
+        'SELECT COUNT(*) as count FROM forum_threads WHERE author_id = ?',
+        [userId]
+      ) as any
 
-  // Track points collector achievement
-  if (activityType === 'EARNED') {
-    const userPoints = await borderService.getUserPoints(userId)
-    await updateAchievementProgress(userId, 'POINTS_COLLECTOR', userPoints)
+      if (existingPosts[0].count === 1) {
+        await updateAchievementProgress(userId, 'FIRST_FORUM_POST', 1)
+      }
+    }
+
+    // Track border collector achievement
+    if (activityType === 'BADGE_EARNED') {
+      const userBorders = await getUserUnlockedBorders(userId)
+      await updateAchievementProgress(userId, 'BORDER_COLLECTOR', userBorders.length)
+    }
+
+    // Track points collector achievement
+    if (activityType === 'EARNED') {
+      const userPoints = await borderService.getUserPoints(userId)
+      await updateAchievementProgress(userId, 'POINTS_COLLECTOR', userPoints)
+    }
+  } catch (error) {
+    console.error('Error tracking activity:', error)
   }
+}
+
+// Helper functions for forum activities
+export async function onForumPostCreated(userId: string) {
+  await trackActivity(userId, 'FORUM_POST', 1)
+}
+
+export async function onForumThreadCreated(userId: string) {
+  await trackActivity(userId, 'FORUM_THREAD_CREATED', 1)
+}
+
+export async function onForumCommentCreated(userId: string) {
+  await trackActivity(userId, 'FORUM_COMMENT', 1)
+}
+
+export async function onCommentLiked(userId: string) {
+  await trackActivity(userId, 'COMMENT_LIKED', 1)
+}
+
+export async function onFriendAdded(userId: string) {
+  await trackActivity(userId, 'FRIEND_ADDED', 1)
+}
+
+export async function onUserRegistered(userId: string) {
+  await trackActivity(userId, 'USER_REGISTERED', 1)
 }

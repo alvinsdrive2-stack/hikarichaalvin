@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getUserAchievements, initializeAchievementsForUser } from "@/lib/achievements"
-import { prisma } from "@/lib/prisma"
+import { dbService } from "@/lib/db-raw"
+import { borderService } from "@/lib/border-service"
 
 export async function GET() {
   try {
@@ -16,14 +17,18 @@ export async function GET() {
     await initializeAchievementsForUser(session.user.id)
 
     const achievements = await getUserAchievements(session.user.id)
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { points: true }
-    })
+
+    // Get user points using border service
+    let userPoints = 0
+    try {
+      userPoints = await borderService.getUserPoints(session.user.id)
+    } catch (error) {
+      console.error('Error getting user points:', error)
+    }
 
     return NextResponse.json({
       achievements,
-      userPoints: user?.points || 0
+      userPoints
     })
   } catch (error) {
     console.error("Error fetching achievements:", error)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getUserAchievements } from "@/lib/achievements"
-import { prisma } from "@/lib/prisma"
+import { getUserAchievements, initializeAchievementsForUser } from "@/lib/achievements"
+import { dbService } from "@/lib/db-raw"
 
 export async function GET(
   request: NextRequest,
@@ -13,23 +13,14 @@ export async function GET(
       return NextResponse.json({ error: "User ID required" }, { status: 400 })
     }
 
+    // Initialize achievements if they don't exist
+    await initializeAchievementsForUser(userId)
+
     // Get user's achievements
     const achievements = await getUserAchievements(userId)
 
-    // Get user info
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        points: true,
-        role: true,
-        bio: true,
-        createdAt: true
-      }
-    })
+    // Get user info using dbService
+    const user = await dbService.getUserById(userId)
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -37,8 +28,15 @@ export async function GET(
 
     // Map image to avatar for frontend consistency
     const userWithAvatar = {
-      ...user,
-      avatar: user.image
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      avatar: user.image,
+      selectedBorder: user.selectedBorder,
+      role: user.role,
+      bio: user.bio,
+      createdAt: user.createdAt
     }
 
     return NextResponse.json({

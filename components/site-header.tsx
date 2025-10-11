@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { ShoppingCart, User, Users, Bell } from "lucide-react"
+import { ShoppingCart, User, Users, Bell, Trophy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useCart } from "@/components/cart-provider"
@@ -73,6 +73,7 @@ export function SiteHeader() {
             </Link>
           </li>
           {session && (
+            <>
             <li>
               <Link href="/friends" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-colors">
                 <Users className="size-4" />
@@ -84,6 +85,13 @@ export function SiteHeader() {
                 )}
               </Link>
             </li>
+            <li>
+              <Link href="/achievements" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-colors">
+                <Trophy className="size-4" />
+                <span className="hidden sm:inline">Achievements</span>
+              </Link>
+            </li>
+            </>
           )}
             <li>
             <Link href="/marketplace#cart" className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md border")}>
@@ -125,6 +133,7 @@ export function SiteHeader() {
               </Link>
             </li>
             {session && (
+              <>
               <li>
                 <Link href="/friends" onClick={() => setOpen(false)} className="flex items-center gap-2">
                   <Users className="size-4" />
@@ -136,6 +145,13 @@ export function SiteHeader() {
                   )}
                 </Link>
               </li>
+              <li>
+                <Link href="/achievements" onClick={() => setOpen(false)} className="flex items-center gap-2">
+                  <Trophy className="size-4" />
+                  <span>Achievements</span>
+                </Link>
+              </li>
+              </>
             )}
               <li className="flex items-center gap-2">
               <ShoppingCart className="size-4" />

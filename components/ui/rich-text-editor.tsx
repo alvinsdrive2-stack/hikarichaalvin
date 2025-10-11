@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback, useMemo } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "./button"
 import { Badge } from "./badge"
@@ -23,7 +23,7 @@ import {
 
 const ReactQuill = dynamic(() => import("react-quill"), {
   ssr: false,
-  loading: () => <div className="h-64 bg-gray-100 animate-pulse rounded-md" />
+  loading: () => <div className="h-64 bg-gray-100 animate-pulse rounded-md flex items-center justify-center text-gray-500">Loading editor...</div>
 })
 
 import "react-quill/dist/quill.snow.css"
@@ -49,21 +49,42 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const quillRef = useRef<any>(null)
 
-  // Image handler that supports file upload
+  // Create a proper image handler for Quill
   const imageHandler = useCallback(() => {
+    console.log('🖼️ Image handler triggered!')
+
     const input = document.createElement('input')
     input.setAttribute('type', 'file')
     input.setAttribute('accept', 'image/*')
     input.click()
 
     input.onchange = async () => {
+      console.log('📁 File input changed')
       const file = input.files?.[0]
+
       if (file) {
-        const formData = new FormData()
-        formData.append('image', file)
+        const quill = quillRef.current
+        if (!quill) {
+          console.error('❌ Quill editor not found')
+          return
+        }
+
+        const range = quill.getSelection()
+        const index = range ? range.index : quill.getLength()
+
+        // Show upload indicator
+        quill.insertText(index, '📤 Mengupload gambar...', 'user')
+        quill.setSelection(index + '📤 Mengupload gambar...'.length)
+
+        // Try server upload first
+        let imageUrl = null
 
         try {
-          console.log('🖼️ Uploading image file:', file.name, file.size)
+          console.log('📄 Processing file:', file.name, file.size, file.type)
+          const formData = new FormData()
+          formData.append('image', file)
+
+          console.log('🖼️ Starting image upload...')
           const response = await fetch('/api/upload/image', {
             method: 'POST',
             body: formData
@@ -74,62 +95,38 @@ export function RichTextEditor({
           if (response.ok) {
             const data = await response.json()
             console.log('✅ Upload response data:', data)
-
-            const quill = quillRef.current?.getEditor()
-            if (!quill) {
-              console.error('❌ Quill editor not found')
-              return
-            }
-
-            const range = quill.getSelection()
-            console.log('📍 Inserting image at range:', range, 'URL:', data.data.url)
-
-            // Get current cursor position or use end of content
-            const index = range ? range.index : quill.getLength()
-
-            // Insert image with proper HTML attributes for better display
-            quill.insertEmbed(index, 'image', data.data.url, 'user')
-
-            // Move cursor after the image
-            quill.setSelection(index + 1)
-
-            console.log('✅ Image inserted successfully at position:', index)
+            imageUrl = data.data.url
           } else {
             console.error('❌ Upload failed with status:', response.status)
-            const errorData = await response.text()
-            console.error('Error response:', errorData)
-
-            // Fallback to base64 if upload fails
-            const reader = new FileReader()
-            reader.onload = (e) => {
-              const quill = quillRef.current?.getEditor()
-              if (quill) {
-                const range = quill.getSelection()
-                const index = range ? range.index : quill.getLength()
-                quill.insertEmbed(index, 'image', e.target?.result, 'user')
-                quill.setSelection(index + 1)
-              }
-            }
-            reader.readAsDataURL(file)
           }
         } catch (error) {
           console.error('❌ Image upload failed:', error)
-          // Fallback to base64
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            const quill = quillRef.current?.getEditor()
-            if (quill) {
-              const range = quill.getSelection()
-              const index = range ? range.index : quill.getLength()
-              quill.insertEmbed(index, 'image', e.target?.result, 'user')
-              quill.setSelection(index + 1)
-            }
-          }
-          reader.readAsDataURL(file)
         }
+
+        // Remove loading indicator and insert image
+        if (imageUrl) {
+          // Remove loading text
+          quill.deleteText(index, '📤 Mengupload gambar...'.length, 'user')
+
+          // Insert the uploaded image at the same position
+          quill.insertEmbed(index, 'image', imageUrl, 'user')
+
+          // Move cursor after the image
+          quill.setSelection(index + 1)
+
+          console.log('✅ Image inserted successfully at position:', index)
+        } else {
+          // Replace loading text with error message
+          quill.deleteText(index, '📤 Mengupload gambar...'.length, 'user')
+          quill.insertText(index, '❌ Gagal mengupload gambar', 'user')
+          quill.setSelection(index + '❌ Gagal mengupload gambar'.length)
+          console.error('❌ Failed to upload image')
+        }
+      } else {
+        console.log('⚠️ No file selected')
       }
     }
-  }, [quillRef])
+  }, [])
 
   // Link handler with validation
   const linkHandler = useCallback(() => {
@@ -152,7 +149,7 @@ export function RichTextEditor({
     }
   }, [])
 
-  const modules = {
+  const modules = useMemo(() => ({
     toolbar: {
       container: [
         [{ 'header': [1, 2, 3, false] }],
@@ -173,7 +170,7 @@ export function RichTextEditor({
     clipboard: {
       matchVisual: false,
     }
-  }
+  }), [imageHandler, linkHandler])
 
   const formats = [
     'header', 'bold', 'italic', 'underline', 'strike', 'blockquote',
@@ -181,6 +178,23 @@ export function RichTextEditor({
     'size', 'color', 'background',
     'link', 'image', 'video', 'code-block', 'formula'
   ]
+
+  // Ensure Quill is properly configured when mounted
+  useEffect(() => {
+    console.log('🔄 Rich Text Editor modules updated')
+  }, [imageHandler, linkHandler])
+
+  // Add useEffect to handle Quill ready state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (quillRef.current) {
+        console.log('✅ Quill editor is ready')
+        // You can add any additional initialization here
+      }
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, [])
 
   const renderPreview = () => {
     return (
