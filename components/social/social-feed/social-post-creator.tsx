@@ -109,12 +109,20 @@ export function SocialPostCreator({ isVisible, onClose, onPostCreated }: SocialP
       const data = await response.json()
 
       if (data.success) {
+        if (!data.data || !data.data.id) {
+          console.error('Invalid post data received from API:', data.data)
+          toast.error("Data postingan tidak valid")
+          return
+        }
+
+        console.log('Post created successfully:', data.data.id)
         onPostCreated(data.data)
         setContent("")
         setMediaUrls([])
         setMediaFiles([])
         onClose()
       } else {
+        console.error('API returned error:', data.error)
         toast.error(data.error || "Gagal membuat postingan")
       }
     } catch (error) {

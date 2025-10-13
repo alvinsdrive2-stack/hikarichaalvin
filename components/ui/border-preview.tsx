@@ -81,7 +81,7 @@ export function BorderPreview({
   onClick,
   className = ""
 }: BorderPreviewProps) {
-  const config = sizeConfig[size]
+  const config = sizeConfig[size] || sizeConfig.md
 
   const getUserInitials = () => {
     return avatarName

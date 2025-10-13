@@ -44,8 +44,12 @@ export function ForumUserBorder({
       console.log('ForumUserBorder: Fetching user data for userId:', userId)
       const response = await fetch(`/api/users/${userId}`)
       if (response.ok) {
-        const user = await response.json()
-        console.log('ForumUserBorder: User data received:', user)
+        const result = await response.json()
+        console.log('ForumUserBorder: API response received:', result)
+
+        // Extract user data from the response structure
+        const user = result.success ? result.data : result
+        console.log('ForumUserBorder: User data extracted:', user)
         setUserData(user)
       } else {
         console.error('ForumUserBorder: Failed to fetch user data, response:', response.status)
@@ -135,6 +139,7 @@ export function ForumUserBorder({
       showUserInfo={showUserInfo}
       showBadge={showUserInfo && !!badgeText}
       badgeText={badgeText || (borderData.rarity ? borderData.rarity.charAt(0).toUpperCase() + borderData.rarity.slice(1).toLowerCase() + ' Member' : 'Member')}
+
       orientation="horizontal"
     />
   )

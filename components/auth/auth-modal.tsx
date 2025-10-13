@@ -109,8 +109,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
+      <Card className="w-full max-w-md bg-white/95 backdrop-blur-md shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-center">
             Selamat Datang di HikariCha

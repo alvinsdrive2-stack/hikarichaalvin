@@ -76,11 +76,31 @@ export function ChatSidebar({
   }, [session]);
 
   const fetchConversations = async () => {
+    if (!session?.user?.id) return;
+
     try {
-      const response = await fetch('/api/chat/conversations');
+      const response = await fetch(`/api/chat/conversations?userId=${session.user.id}`);
       if (response.ok) {
         const data = await response.json();
-        setConversations(data.conversations || []);
+        // Transform API data to match our interface
+        const transformedConversations = data.data.map((conv: any) => ({
+          id: conv.id,
+          type: conv.type,
+          name: conv.name,
+          participantIds: conv.participants.map((p: any) => p.id),
+          participants: conv.participants,
+          lastMessage: conv.lastMessageContent ? {
+            content: conv.lastMessageContent,
+            senderId: '', // Would need to fetch this separately
+            senderName: '',
+            timestamp: conv.lastMessageAt || conv.updated_at,
+            type: 'TEXT'
+          } : undefined,
+          unreadCount: conv.unreadCount || 0,
+          isPinned: false, // Would need to implement pinning
+          isActive: conv.is_active
+        }));
+        setConversations(transformedConversations);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -170,9 +190,10 @@ export function ChatSidebar({
 
   const ConversationItem = ({ conversation }: { conversation: Conversation }) => {
     const isSelected = conversation.id === selectedConversationId;
-    const { border: userBorder } = useUserBorder(
-      conversation.type === 'DIRECT' ? conversation.participants[0]?.id : session?.user?.id
-    );
+    const borderUserId = conversation.type === 'DIRECT'
+      ? conversation.participants[0]?.id || session?.user?.id
+      : session?.user?.id;
+    const { border: userBorder } = useUserBorder(borderUserId);
 
     return (
       <div

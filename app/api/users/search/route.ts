@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
           // Search by name or email
           {
             OR: [
-              { name: { contains: validatedData.q, mode: 'insensitive' } },
-              { email: { contains: validatedData.q, mode: 'insensitive' } }
+              { name: { contains: validatedData.q } },
+              { email: { contains: validatedData.q } }
             ]
           }
         ]
@@ -64,8 +64,7 @@ export async function GET(request: NextRequest) {
         // Prioritize exact name matches
         {
           name: {
-            sort: 'asc',
-            mode: 'insensitive'
+            sort: 'asc'
           }
         }
       ],
@@ -132,8 +131,8 @@ export async function GET(request: NextRequest) {
           { id: { not: currentUserId } },
           {
             OR: [
-              { name: { contains: validatedData.q, mode: 'insensitive' } },
-              { email: { contains: validatedData.q, mode: 'insensitive' } }
+              { name: { contains: validatedData.q } },
+              { email: { contains: validatedData.q } }
             ]
           }
         ]

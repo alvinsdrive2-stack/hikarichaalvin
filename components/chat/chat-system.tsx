@@ -54,6 +54,108 @@ interface User {
   friendStatus?: 'NONE' | 'FRIENDS' | 'REQUEST_SENT' | 'REQUEST_RECEIVED';
 }
 
+// Separate component for user search result to avoid hooks in loops
+function UserSearchResultItem({
+  user,
+  onStartChat,
+  onAddFriend
+}: {
+  user: User;
+  onStartChat: (userId: string) => void;
+  onAddFriend: (userId: string) => void;
+}) {
+  const { border: userBorder } = useUserBorder(user.id);
+
+  return (
+    <div
+      key={user.id}
+      className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+      onClick={() => onStartChat(user.id)}
+    >
+      <FlexibleAvatar
+        src={user.image}
+        name={user.name}
+        userBorder={userBorder}
+        size="md"
+      />
+      <div className="flex-1">
+        <div className="font-medium">{user.name}</div>
+        <div className="text-sm text-gray-500">
+          {user.status === 'ONLINE' ? 'Online' : user.status || 'Offline'}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {user.friendStatus === 'FRIENDS' && (
+          <Badge variant="outline" className="text-green-600 border-green-200">
+            Friends
+          </Badge>
+        )}
+        {user.friendStatus === 'REQUEST_SENT' && (
+          <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+            Request Sent
+          </Badge>
+        )}
+        {user.friendStatus === 'REQUEST_RECEIVED' && (
+          <Badge variant="outline" className="text-blue-600 border-blue-200">
+            Request Received
+          </Badge>
+        )}
+        {user.friendStatus === 'NONE' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddFriend(user.id);
+            }}
+          >
+            <UserPlus className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Separate component for group user selection to avoid hooks in loops
+function GroupUserSelectItem({
+  user,
+  isSelected,
+  onSelectUser
+}: {
+  user: User;
+  isSelected: boolean;
+  onSelectUser: (user: User) => void;
+}) {
+  const { border: userBorder } = useUserBorder(user.id);
+
+  return (
+    <div
+      key={user.id}
+      className={cn(
+        "flex items-center gap-3 p-2 rounded-lg cursor-pointer",
+        isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
+      )}
+      onClick={() => onSelectUser(user)}
+    >
+      <FlexibleAvatar
+        src={user.image}
+        name={user.name}
+        userBorder={userBorder}
+        size="sm"
+      />
+      <div className="flex-1">
+        <div className="font-medium text-sm">{user.name}</div>
+      </div>
+      {isSelected && (
+        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+          <div className="w-2 h-2 bg-white rounded-full" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatSystem() {
   const { data: session } = useSession();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -65,7 +167,7 @@ export function ChatSystem() {
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedConversation = null; // This would be fetched from conversations
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
 
   useEffect(() => {
     if (searchQuery) {
@@ -75,19 +177,67 @@ export function ChatSystem() {
     }
   }, [searchQuery]);
 
-  const searchUsers = async () => {
+  // Fetch conversation details when selected
+  useEffect(() => {
+    if (selectedConversationId && session?.user?.id) {
+      fetchConversationDetails(selectedConversationId);
+    }
+  }, [selectedConversationId, session]);
+
+  const fetchConversationDetails = async (conversationId: string) => {
     try {
-      const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(`/api/chat/conversations?userId=${session?.user?.id}`);
       if (response.ok) {
         const data = await response.json();
-        setSearchResults(data.users.filter((u: User) => u.id !== session?.user?.id) || []);
+        const conversation = data.data.find((conv: any) => conv.id === conversationId);
+        if (conversation) {
+          setSelectedConversation({
+            id: conversation.id,
+            type: conversation.type,
+            name: conversation.name,
+            participantIds: conversation.participants.map((p: any) => p.id),
+            participants: conversation.participants,
+            lastMessage: conversation.lastMessageContent ? {
+              content: conversation.lastMessageContent,
+              senderId: '',
+              senderName: '',
+              timestamp: conversation.lastMessageAt || conversation.updated_at,
+              type: 'TEXT'
+            } : undefined,
+            unreadCount: conversation.unreadCount || 0,
+            isPinned: false,
+            isActive: conversation.is_active
+          });
+        }
       }
     } catch (error) {
-      console.error('Error searching users:', error);
+      console.error('Error fetching conversation details:', error);
+    }
+  };
+
+  const searchUsers = async () => {
+    try {
+      // Search friends only
+      const response = await fetch(`/api/friends?type=friends&q=${encodeURIComponent(searchQuery)}`);
+      if (response.ok) {
+        const data = await response.json();
+        const friends = data.friends || [];
+        setSearchResults(friends.map((friend: any) => ({
+          id: friend.id,
+          name: friend.name,
+          image: friend.image,
+          status: friend.status || 'OFFLINE',
+          friendStatus: 'FRIENDS'
+        })) || []);
+      }
+    } catch (error) {
+      console.error('Error searching friends:', error);
     }
   };
 
   const handleStartNewChat = async (userId: string) => {
+    if (!session?.user?.id) return;
+
     setLoading(true);
     try {
       const response = await fetch('/api/chat/conversations', {
@@ -97,16 +247,22 @@ export function ChatSystem() {
         },
         body: JSON.stringify({
           type: 'DIRECT',
-          participantIds: [userId]
+          participantIds: [userId],
+          createdBy: session.user.id
         })
       });
 
       if (response.ok) {
-        const conversation = await response.json();
-        setSelectedConversationId(conversation.id);
+        const data = await response.json();
+        setSelectedConversationId(data.data.conversationId);
         setShowNewChatDialog(false);
         setSearchQuery("");
         setSearchResults([]);
+        // Refresh conversations list
+        const sidebar = document.querySelector('[data-chat-sidebar]');
+        if (sidebar) {
+          (sidebar as any).refreshConversations?.();
+        }
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
@@ -116,6 +272,7 @@ export function ChatSystem() {
   };
 
   const handleCreateGroup = async () => {
+    if (!session?.user?.id) return;
     if (!groupName.trim() || selectedUsers.length < 2) {
       alert('Please enter a group name and select at least 2 members');
       return;
@@ -131,18 +288,24 @@ export function ChatSystem() {
         body: JSON.stringify({
           type: 'GROUP',
           name: groupName.trim(),
-          participantIds: selectedUsers.map(u => u.id)
+          participantIds: selectedUsers.map(u => u.id),
+          createdBy: session.user.id
         })
       });
 
       if (response.ok) {
-        const conversation = await response.json();
-        setSelectedConversationId(conversation.id);
+        const data = await response.json();
+        setSelectedConversationId(data.data.conversationId);
         setShowCreateGroupDialog(false);
         setGroupName("");
         setSelectedUsers([]);
         setSearchQuery("");
         setSearchResults([]);
+        // Refresh conversations list
+        const sidebar = document.querySelector('[data-chat-sidebar]');
+        if (sidebar) {
+          (sidebar as any).refreshConversations?.();
+        }
       }
     } catch (error) {
       console.error('Error creating group:', error);
@@ -207,9 +370,9 @@ export function ChatSystem() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex">
-        {selectedConversationId ? (
+        {selectedConversation ? (
           <ChatWindow
-            conversation={selectedConversation!}
+            conversation={selectedConversation}
             onConversationInfo={() => {}}
           />
         ) : (
@@ -277,58 +440,14 @@ export function ChatSystem() {
 
             {/* Search Results */}
             <div className="max-h-60 overflow-y-auto space-y-2">
-              {searchResults.map((user) => {
-                const { border: userBorder } = useUserBorder(user.id);
-                return (
-                  <div
-                    key={user.id}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleStartNewChat(user.id)}
-                  >
-                    <FlexibleAvatar
-                      src={user.image}
-                      name={user.name}
-                      userBorder={userBorder}
-                      size="md"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium">{user.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {user.status === 'ONLINE' ? 'Online' : user.status || 'Offline'}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {user.friendStatus === 'FRIENDS' && (
-                        <Badge variant="outline" className="text-green-600 border-green-200">
-                          Friends
-                        </Badge>
-                      )}
-                      {user.friendStatus === 'REQUEST_SENT' && (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-200">
-                          Request Sent
-                        </Badge>
-                      )}
-                      {user.friendStatus === 'REQUEST_RECEIVED' && (
-                        <Badge variant="outline" className="text-blue-600 border-blue-200">
-                          Request Received
-                        </Badge>
-                      )}
-                      {user.friendStatus === 'NONE' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddFriend(user.id);
-                          }}
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {searchResults.map((user) => (
+                <UserSearchResultItem
+                  key={user.id}
+                  user={user}
+                  onStartChat={handleStartNewChat}
+                  onAddFriend={handleAddFriend}
+                />
+              ))}
 
               {searchQuery && searchResults.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
@@ -403,36 +522,14 @@ export function ChatSystem() {
 
             {/* Search Results */}
             <div className="max-h-40 overflow-y-auto space-y-2">
-              {searchResults.map((user) => {
-                const isSelected = selectedUsers.some(u => u.id === user.id);
-                const { border: userBorder } = useUserBorder(user.id);
-
-                return (
-                  <div
-                    key={user.id}
-                    className={cn(
-                      "flex items-center gap-3 p-2 rounded-lg cursor-pointer",
-                      isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
-                    )}
-                    onClick={() => handleSelectUser(user)}
-                  >
-                    <FlexibleAvatar
-                      src={user.image}
-                      name={user.name}
-                      userBorder={userBorder}
-                      size="sm"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{user.name}</div>
-                    </div>
-                    {isSelected && (
-                      <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                        <div className="w-2 h-2 bg-white rounded-full" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {searchResults.map((user) => (
+                <GroupUserSelectItem
+                  key={user.id}
+                  user={user}
+                  isSelected={selectedUsers.some(u => u.id === user.id)}
+                  onSelectUser={handleSelectUser}
+                />
+              ))}
             </div>
 
             {/* Actions */}

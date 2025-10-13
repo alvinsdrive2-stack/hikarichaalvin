@@ -29,9 +29,18 @@ interface SocialPost {
 interface SocialFeedProps {
   authorId?: string
   className?: string
+  mode?: 'home' | 'trending' | 'search' | 'saved'
+  searchQuery?: string
+  timeRange?: 'hour' | 'day' | 'week' | 'month'
 }
 
-export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
+export function SocialFeed({
+  authorId,
+  className = "",
+  mode = 'home',
+  searchQuery,
+  timeRange = 'day'
+}: SocialFeedProps) {
   const [posts, setPosts] = useState<SocialPost[]>([])
   const [loading, setLoading] = useState(true)
   const [showPostCreator, setShowPostCreator] = useState(false)
@@ -42,17 +51,44 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
     try {
       if (showRefresh) setIsRefreshing(true)
 
-      const params = new URLSearchParams()
-      if (authorId) params.append('author_id', authorId)
-      params.append('limit', '20')
+      let url = ''
+      let params = new URLSearchParams()
 
-      const response = await fetch(`/api/social/posts?${params}`)
+      switch (mode) {
+        case 'trending':
+          url = '/api/social/posts/trending'
+          params.append('limit', '20')
+          params.append('timeRange', timeRange)
+          break
+        case 'search':
+          url = '/api/social/search'
+          params.append('q', searchQuery || '')
+          params.append('type', 'posts')
+          params.append('limit', '20')
+          break
+        case 'saved':
+          url = '/api/social/posts/saved'
+          params.append('limit', '20')
+          break
+        default: // home
+          url = '/api/social/posts'
+          if (authorId) {
+            params.append('author_id', authorId)
+          } else {
+            // Use prioritized feed for home page when user is authenticated
+            params.append('feed_type', 'prioritized')
+          }
+          params.append('limit', '20')
+          break
+      }
+
+      const response = await fetch(`${url}?${params}`)
       const data = await response.json()
 
       if (data.success) {
         setPosts(data.data)
       } else {
-        toast.error("Gagal memuat postingan")
+        toast.error(`Gagal memuat postingan${mode === 'trending' ? ' trending' : mode === 'search' ? ' hasil pencarian' : ''}`)
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
@@ -65,9 +101,16 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
 
   useEffect(() => {
     fetchPosts()
-  }, [authorId])
+  }, [authorId, mode, searchQuery, timeRange])
 
   const handleNewPost = (newPost: SocialPost) => {
+    // Validate post has required fields
+    if (!newPost || !newPost.id) {
+      console.error('Invalid post data received:', newPost)
+      toast.error("Terjadi kesalahan dengan data postingan")
+      return
+    }
+
     setPosts(prev => [newPost, ...prev])
     setShowPostCreator(false)
     toast.success("Postingan berhasil dibuat!")
@@ -105,10 +148,19 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">
-            {authorId ? "Postingan" : "Beranda Sosial"}
+            {mode === 'trending' ? "Postingan Trending" :
+             mode === 'search' ? `Hasil Pencarian: "${searchQuery}"` :
+             mode === 'saved' ? "Postingan Tersimpan" :
+             authorId ? "Postingan" : "Beranda Sosial"}
           </h2>
           <p className="text-muted-foreground mt-1">
-            {authorId
+            {mode === 'trending'
+              ? `Lihat postingan terpopuler ${timeRange === 'hour' ? '1 jam terakhir' : timeRange === 'day' ? '24 jam terakhir' : timeRange === 'week' ? '7 hari terakhir' : '30 hari terakhir'}`
+              : mode === 'search'
+              ? `Hasil pencarian untuk "${searchQuery}"`
+              : mode === 'saved'
+              ? "Koleksi postingan yang Anda simpan"
+              : authorId
               ? "Lihat semua postingan dari pengguna ini"
               : "Lihat update terbaru dari komunitas HikariCha"
             }
@@ -128,7 +180,7 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
           </Button>
 
           {/* Create Post Button */}
-          {!authorId && session && !showPostCreator && (
+          {mode === 'home' && !authorId && session && !showPostCreator && (
             <Button
               onClick={() => setShowPostCreator(true)}
               className="bg-primary hover:bg-primary/90 hover:scale-105 transition-all duration-200 hover:shadow-lg"
@@ -169,7 +221,7 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
         <>
           {posts.length > 0 ? (
             <div className="space-y-6">
-              {posts.map((post) => (
+              {posts.filter(post => post && post.id).map((post) => (
                 <SocialPostCard
                   key={post.id}
                   post={post}
@@ -188,16 +240,25 @@ export function SocialFeed({ authorId, className = "" }: SocialFeedProps) {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-2">
-                      {authorId ? "Belum ada postingan" : "Mulai berbagi momen Anda"}
+                      {mode === 'trending' ? "Belum ada postingan trending" :
+                       mode === 'search' ? "Tidak ada hasil pencarian" :
+                       mode === 'saved' ? "Belum ada postingan tersimpan" :
+                       authorId ? "Belum ada postingan" : "Mulai berbagi momen Anda"}
                     </h3>
                     <p className="text-muted-foreground">
-                      {authorId
+                      {mode === 'trending'
+                        ? `Belum ada postingan trending dalam ${timeRange === 'hour' ? '1 jam terakhir' : timeRange === 'day' ? '24 jam terakhir' : timeRange === 'week' ? '7 hari terakhir' : '30 hari terakhir'}.`
+                        : mode === 'search'
+                        ? `Tidak ada hasil untuk "${searchQuery}". Coba kata kunci yang berbeda.`
+                        : mode === 'saved'
+                        ? "Anda belum menyimpan postingan apa pun. Simpan postingan yang menarik untuk dibaca nanti."
+                        : authorId
                         ? "Pengguna ini belum membuat postingan apa pun."
                         : "Buat postingan pertama Anda untuk berbagi dengan komunitas HikariCha."
                       }
                     </p>
                   </div>
-                  {!authorId && session && !showPostCreator && (
+                  {mode === 'home' && !authorId && session && !showPostCreator && (
                     <Button
                       onClick={() => setShowPostCreator(true)}
                       className="mt-4 bg-primary hover:bg-primary/90 hover:scale-105 transition-all duration-200 hover:shadow-lg"

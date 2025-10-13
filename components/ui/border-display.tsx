@@ -73,6 +73,18 @@ export function BorderDisplay({
   orientation = "horizontal",
   className = ""
 }: BorderDisplayProps) {
+  // Handle null/undefined border
+  if (!border) {
+    console.warn('BorderDisplay: No border data provided, using default')
+    border = {
+      id: 'default',
+      name: 'Default',
+      imageUrl: '/borders/default.svg',
+      unlocked: true,
+      rarity: 'Default'
+    }
+  }
+
   console.log('🔍 BorderDisplay: Received border data:', border)
   console.log('🔍 BorderDisplay: Converting border:', {
     id: border.id,
@@ -84,7 +96,7 @@ export function BorderDisplay({
     return (
       <div className={`flex flex-col items-center space-y-2 ${className}`}>
         <BorderPreview
-          border={border}
+          border={convertToBorderPreview(border)}
           size={size}
           avatarSrc={userAvatar}
           avatarName={userName}

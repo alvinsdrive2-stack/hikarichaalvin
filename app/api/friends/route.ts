@@ -68,8 +68,13 @@ export async function GET(request: NextRequest) {
         const friendList = friends.map(friendship => {
           const friend = friendship.user1Id === userId ? friendship.user2 : friendship.user1;
           return {
-            id: friendship.id,
-            friend,
+            id: friend.id,
+            name: friend.name,
+            email: friend.email,
+            image: friend.image,
+            customStatus: friend.customStatus,
+            status: friend.userstatus?.status || 'OFFLINE',
+            lastSeen: friend.userstatus?.lastSeen,
             createdAt: friendship.createdAt
           };
         });

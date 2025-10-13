@@ -37,6 +37,8 @@ export interface User {
   location: string | null;
   points: number;
   selectedBorder: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Activity {
@@ -58,7 +60,7 @@ export class DatabaseService {
     try {
       const conn = await this.getConnection();
       const [rows] = await conn.execute(
-        'SELECT id, name, email, bio, location, points, selectedBorder, image FROM user WHERE email = ?',
+        'SELECT id, name, email, bio, location, points, selectedBorder, image, createdAt, updatedAt FROM user WHERE email = ?',
         [email]
       ) as any;
 
@@ -73,7 +75,7 @@ export class DatabaseService {
     try {
       const conn = await this.getConnection();
       const [rows] = await conn.execute(
-        'SELECT id, name, email, bio, location, points, selectedBorder, image FROM user WHERE id = ?',
+        'SELECT id, name, email, bio, location, points, selectedBorder, image, createdAt, updatedAt FROM user WHERE id = ?',
         [userId]
       ) as any;
 

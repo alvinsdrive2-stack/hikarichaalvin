@@ -50,10 +50,10 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(2, 15)
     const extension = file.name.split('.').pop()
-    const filename = `forum_${timestamp}_${random}.${extension}`
+    const filename = `social_${timestamp}_${random}.${extension}`
 
     // Ensure upload directory exists
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'forum')
+    const uploadDir = join(process.cwd(), 'public', 'uploads', 'social')
     try {
       await mkdir(uploadDir, { recursive: true })
     } catch (error) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     await writeFile(filepath, buffer)
 
     // Return file URL
-    const fileUrl = `/uploads/forum/${filename}`
+    const fileUrl = `/uploads/social/${filename}`
 
     return NextResponse.json({
       success: true,

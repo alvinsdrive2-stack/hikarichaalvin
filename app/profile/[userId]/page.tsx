@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, MessageSquare, Heart, Calendar, Trophy, Users, UserPlus, MapPin, Globe, Coffee } from "lucide-react"
+import { ArrowLeft, MessageSquare, Heart, Calendar, Trophy, Users, UserPlus, MapPin, Globe, Coffee, Bookmark, Lock } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { FlexibleAvatar } from "@/components/ui/flexible-avatar"
+import { BorderDisplay } from "@/components/ui/border-display"
 import { FriendList } from "@/components/social/friend-system"
+import { FollowButton } from "@/components/social/follow-button"
 import { User } from "lucide-react"
+import { SocialFeed } from "@/components/social/social-feed/social-feed"
 
 interface User {
   id: string
@@ -45,6 +47,7 @@ interface User {
     experienceLevel?: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
   }
   friendshipStatus?: 'NONE' | 'FRIENDS' | 'REQUEST_SENT' | 'REQUEST_RECEIVED';
+  isFollowing?: boolean;
 }
 
 interface Friend {
@@ -75,6 +78,8 @@ export default function UserProfilePage() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
   const [friendActionLoading, setFriendActionLoading] = useState(false)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [userBorder, setUserBorder] = useState<any>(null)
 
   const isOwnProfile = session?.user?.id === userId
 
@@ -86,9 +91,11 @@ export default function UserProfilePage() {
 
   const fetchUserData = async () => {
     try {
-      const [achievementsResponse, friendsResponse] = await Promise.all([
+      const [achievementsResponse, friendsResponse, followResponse] = await Promise.all([
         fetch(`/api/achievements/${userId}`),
-        fetch(`/api/friends?type=friends&userId=${userId}`)
+        fetch(`/api/friends?type=friends&userId=${userId}`),
+        isOwnProfile ? Promise.resolve({ ok: true, json: () => ({ data: { isFollowing: false } }) }) :
+                    fetch(`/api/social/follow?type=following&limit=100`)
       ])
 
       if (achievementsResponse.ok) {
@@ -104,6 +111,53 @@ export default function UserProfilePage() {
       if (friendsResponse.ok) {
         const friendsData = await friendsResponse.json()
         setFriends(friendsData.friends || [])
+      }
+
+      // Check follow status
+      if (followResponse.ok && !isOwnProfile) {
+        const followData = await followResponse.json()
+        const isUserFollowing = followData.data.some((followedUser: any) => followedUser.id === userId)
+        setIsFollowing(isUserFollowing)
+      }
+
+      // Get additional user stats (posts, followers, following)
+      try {
+        const statsResponse = await fetch(`/api/users/${userId}/stats`);
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setUser(prev => prev ? {
+            ...prev,
+            friendCount: statsData.friendCount || 0,
+            followerCount: statsData.followerCount || 0,
+            followingCount: statsData.followingCount || 0,
+            postCount: statsData.postCount || 0
+          } : null);
+        }
+      } catch (error) {
+        console.error("Error fetching user stats:", error);
+      }
+
+      
+      // Get user border
+      try {
+        const borderResponse = await fetch(`/api/users/${userId}/border`);
+        if (borderResponse.ok) {
+          const borderData = await borderResponse.json();
+          if (borderData.border) {
+            const completeBorder = await getBorderFromDatabase(borderData.border.id);
+            setUserBorder(completeBorder);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user border:", error);
+        // Set default border on error
+        setUserBorder({
+          id: 'default',
+          name: 'Default',
+          imageUrl: '/borders/default.png',
+          unlocked: true,
+          rarity: 'COMMON'
+        });
       }
     } catch (error) {
       console.error("Error fetching user data:", error)
@@ -172,6 +226,9 @@ export default function UserProfilePage() {
       if (response.ok) {
         toast.success('Friend request sent!');
         setUser(prev => prev ? { ...prev, friendshipStatus: 'REQUEST_SENT' } : null);
+
+        // Also update friend count to show immediate feedback
+        setUser(prev => prev ? { ...prev, friendCount: (prev.friendCount || 0) + 1 } : null);
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to send friend request');
@@ -184,10 +241,183 @@ export default function UserProfilePage() {
     }
   };
 
-  const handleStartChat = (friendId: string) => {
-    // TODO: Implement chat functionality
-    toast.info('Chat feature coming soon!');
+  const handleAcceptRequest = async () => {
+    if (!session?.user?.id || !user || user.friendshipStatus !== 'REQUEST_RECEIVED') return;
+
+    setFriendActionLoading(true);
+    try {
+      // Find the request ID first
+      const response = await fetch('/api/friends?type=received');
+      if (response.ok) {
+        const data = await response.json();
+        const request = data.requests?.find((req: any) => req.sender.id === user.id);
+
+        if (request) {
+          const acceptResponse = await fetch(`/api/friends/requests/${request.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'accept' })
+          });
+
+          if (acceptResponse.ok) {
+            toast.success('Friend request accepted!');
+            setUser(prev => prev ? { ...prev, friendshipStatus: 'FRIENDS' } : null);
+            // Refresh friends data
+            fetchUserData();
+          } else {
+            const error = await acceptResponse.json();
+            toast.error(error.error || 'Failed to accept request');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error accepting friend request:', error);
+      toast.error('Failed to accept request');
+    } finally {
+      setFriendActionLoading(false);
+    }
   };
+
+  const handleRemoveFriend = async () => {
+    if (!session?.user?.id || !user || user.friendshipStatus !== 'FRIENDS') return;
+
+    setFriendActionLoading(true);
+    try {
+      const response = await fetch(`/api/friends?friendId=${user.id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast.success('Friend removed');
+        setUser(prev => prev ? { ...prev, friendshipStatus: 'NONE', friendCount: Math.max(0, (prev.friendCount || 0) - 1) } : null);
+        // Refresh friends data
+        fetchUserData();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to remove friend');
+      }
+    } catch (error) {
+      console.error('Error removing friend:', error);
+      toast.error('Failed to remove friend');
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!session?.user?.id || !user || user.friendshipStatus !== 'REQUEST_SENT') return;
+
+    setFriendActionLoading(true);
+    try {
+      // Find the sent request ID first
+      const response = await fetch('/api/friends?type=sent');
+      if (response.ok) {
+        const data = await response.json();
+        const request = data.requests?.find((req: any) => req.receiver.id === user.id);
+
+        if (request) {
+          const cancelResponse = await fetch(`/api/friends/requests/${request.id}`, {
+            method: 'DELETE'
+          });
+
+          if (cancelResponse.ok) {
+            toast.success('Friend request cancelled');
+            setUser(prev => prev ? { ...prev, friendshipStatus: 'NONE', friendCount: Math.max(0, (prev.friendCount || 0) - 1) } : null);
+            // Refresh friends data
+            fetchUserData();
+          } else {
+            const error = await cancelResponse.json();
+            toast.error(error.error || 'Failed to cancel request');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling friend request:', error);
+      toast.error('Failed to cancel request');
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const handleStartChat = async (friendId: string) => {
+    if (!session?.user?.id) {
+      toast.error('You need to be logged in to start a chat');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/chat/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'DIRECT',
+          participantIds: [friendId],
+          createdBy: session.user.id
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Chat started!');
+        // Navigate to chat page with the new conversation
+        router.push(`/chat?conversation=${data.data.conversationId}`);
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to start chat');
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      toast.error('Failed to start chat');
+    }
+  };
+
+  const handleFollowChange = (following: boolean) => {
+    setIsFollowing(following)
+  };
+
+  const getBorderFromDatabase = async (borderId: string) => {
+    if (!borderId) {
+      return {
+        id: 'default',
+        name: 'Default',
+        imageUrl: '/borders/default.png',
+        unlocked: true,
+        rarity: 'COMMON'
+      }
+    }
+
+    try {
+      const response = await fetch('/api/borders-public')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data) {
+          const border = data.data.find((b: any) => b.id === borderId)
+          if (border) {
+            return {
+              id: border.id,
+              name: border.name,
+              imageUrl: border.imageUrl,
+              unlocked: true,
+              rarity: border.rarity
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching border data:', error)
+    }
+
+    // Fallback to default border
+    return {
+      id: borderId,
+      name: borderId.charAt(0).toUpperCase() + borderId.slice(1),
+      imageUrl: '/borders/default.png',
+      unlocked: true,
+      rarity: 'COMMON'
+    }
+  }
 
   const getAchievementIcon = (type: string) => {
     switch (type) {
@@ -258,15 +488,17 @@ export default function UserProfilePage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex flex-col lg:flex-row items-start gap-6">
-              {/* Avatar */}
+              {/* Avatar with Border */}
               <div className="flex flex-col items-center">
                 <div className="relative">
-                  <FlexibleAvatar
-                    src={user.image}
-                    alt={user.name}
-                    fallback={user.name?.charAt(0)?.toUpperCase() || 'U'}
-                    size="xl"
-                    className="ring-4 ring-background"
+                  <BorderDisplay
+                    border={userBorder || { id: 'default', name: 'Default', imageUrl: '/borders/default.png', unlocked: true, rarity: 'COMMON' }}
+                    userAvatar={user.image}
+                    userName={user.name}
+                    size="forum"
+                    showUserInfo={false}
+                    showBadge={false}
+                    orientation="vertical"
                   />
                   {user.userStatus && (
                     <div
@@ -277,9 +509,29 @@ export default function UserProfilePage() {
                   )}
                 </div>
                 <div className="mt-2 text-center space-y-1">
-                  <Badge variant="outline" className="text-xs">
-                    {user.role || 'Member'}
-                  </Badge>
+                  {userBorder?.rarity && (
+                    <Badge
+                      variant="outline"
+                      className={`text-xs font-medium ${
+                        userBorder.rarity === 'BRONZE' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                        userBorder.rarity === 'SILVER' ? 'bg-zinc-100 text-zinc-800 border-zinc-200' :
+                        userBorder.rarity === 'GOLD' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                        userBorder.rarity === 'COMMON' ? 'bg-gray-100 text-gray-800 border-gray-200' :
+                        userBorder.rarity === 'RARE' ? 'bg-sky-100 text-sky-800 border-sky-200' :
+                        userBorder.rarity === 'EPIC' ? 'bg-violet-100 text-violet-800 border-violet-200' :
+                        userBorder.rarity === 'LEGENDARY' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                        userBorder.rarity === 'MYTHIC' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                        'bg-gray-100 text-gray-800 border-gray-200'
+                      }`}
+                    >
+                      {userBorder.rarity.charAt(0).toUpperCase() + userBorder.rarity.slice(1).toLowerCase()} Member
+                    </Badge>
+                  )}
+                  {!userBorder?.rarity && (
+                    <Badge variant="outline" className="text-xs">
+                      {user.role || 'Member'}
+                    </Badge>
+                  )}
                   {user.userStatus && (
                     <div className="text-xs text-muted-foreground">
                       {getStatusText(user.userStatus.status, user.userStatus.lastSeen)}
@@ -291,7 +543,18 @@ export default function UserProfilePage() {
               {/* User Info */}
               <div className="flex-1 text-center lg:text-left">
                 <div className="flex items-center justify-center lg:justify-start gap-2 mb-2">
-                  <h1 className="text-2xl font-bold text-gray-900">
+                  <h1
+                    className={`text-2xl font-bold transition-colors duration-200 ${
+                      isOwnProfile
+                        ? 'text-gray-900'
+                        : 'text-gray-900 hover:text-blue-600 cursor-pointer'
+                    }`}
+                    onClick={() => {
+                      if (!isOwnProfile) {
+                        router.push(`/profile/${userId}`)
+                      }
+                    }}
+                  >
                     {user.name}
                   </h1>
                   {user.customStatus && (
@@ -313,10 +576,18 @@ export default function UserProfilePage() {
                     <Calendar className="h-4 w-4" />
                     Joined {formatDate(user.createdAt)}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Trophy className="h-4 w-4" />
-                    {user.points} Points
-                  </div>
+                  {/* Show last active only for friends or own profile */}
+                  {(user.friendshipStatus === 'FRIENDS' || isOwnProfile) && user.userStatus && (
+                    <div className="flex items-center gap-1">
+                      <div className={`h-3 w-3 rounded-full ${getStatusColor(user.userStatus.status)}`} />
+                      <span className="text-xs">
+                        {user.userStatus.status === 'ONLINE'
+                          ? 'Active now'
+                          : `Last seen ${getStatusText(user.userStatus.status, user.userStatus.lastSeen)}`
+                        }
+                      </span>
+                    </div>
+                  )}
                   {user.location && (
                     <div className="flex items-center gap-1">
                       <MapPin className="h-4 w-4" />
@@ -384,55 +655,80 @@ export default function UserProfilePage() {
               </div>
 
               {/* Actions */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3 min-w-[160px]">
                 {isOwnProfile ? (
-                  <Button onClick={() => router.push("/profile")}>
+                  <Button onClick={() => router.push("/profile")} className="w-full">
                     Edit Profile
                   </Button>
                 ) : (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleStartChat(user.id)}
-                    >
-                      Message
-                    </Button>
-                    {user.friendshipStatus === 'NONE' && (
-                      <Button
-                        onClick={handleSendFriendRequest}
-                        disabled={friendActionLoading}
-                        className="w-full"
-                      >
-                        {friendActionLoading ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-current" />
-                        ) : (
-                          <>
-                            <UserPlus className="h-4 w-4 mr-2" />
-                            Add Friend
-                          </>
-                        )}
-                      </Button>
-                    )}
                     {user.friendshipStatus === 'FRIENDS' && (
-                      <Badge variant="default" className="w-full justify-center py-2">
-                        <Users className="h-4 w-4 mr-2" />
-                        Friends
-                      </Badge>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          onClick={() => handleStartChat(user.id)}
+                          variant="outline"
+                          className="flex items-center gap-1"
+                          size="sm"
+                          title="Start a conversation"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                          <span className="hidden sm:inline">Chat</span>
+                        </Button>
+
+                        {/* Empty space for balance when friends */}
+                        <div></div>
+                      </div>
                     )}
-                    {user.friendshipStatus === 'REQUEST_SENT' && (
-                      <Badge variant="secondary" className="w-full justify-center py-2">
-                        Request Sent
-                      </Badge>
-                    )}
-                    {user.friendshipStatus === 'REQUEST_RECEIVED' && (
+
+                    <div className="flex flex-col gap-2">
                       <Button
-                        variant="secondary"
-                        onClick={() => router.push('/friends?tab=requests')}
-                        className="w-full"
-                      >
-                        View Request
-                      </Button>
-                    )}
+                          onClick={user.friendshipStatus === 'NONE' ? handleSendFriendRequest :
+                                 user.friendshipStatus === 'FRIENDS' ? handleRemoveFriend :
+                                 user.friendshipStatus === 'REQUEST_SENT' ? handleCancelRequest :
+                                 handleAcceptRequest}
+                          disabled={friendActionLoading}
+                          className={`flex items-center gap-1 h-8 ${
+                            user.friendshipStatus === 'NONE' ? 'bg-blue-600 hover:bg-blue-700 text-white' :
+                            user.friendshipStatus === 'FRIENDS' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                            user.friendshipStatus === 'REQUEST_SENT' ? 'bg-gray-500 hover:bg-gray-600 text-white' :
+                            'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                          size="sm"
+                          title={
+                            user.friendshipStatus === 'NONE' ? 'Add Friend' :
+                            user.friendshipStatus === 'FRIENDS' ? 'Remove Friend' :
+                            user.friendshipStatus === 'REQUEST_SENT' ? 'Cancel Request' :
+                            'Accept Friend Request'
+                          }
+                        >
+                          {friendActionLoading ? (
+                            <div className="h-3 w-3 animate-spin rounded-full border-b-2 border-current" />
+                          ) : (
+                            <>
+                              {user.friendshipStatus === 'NONE' && <UserPlus className="h-3 w-3" />}
+                              {user.friendshipStatus === 'FRIENDS' && <Users className="h-3 w-3" />}
+                              {user.friendshipStatus === 'REQUEST_SENT' && <Users className="h-3 w-3" />}
+                              {user.friendshipStatus === 'REQUEST_RECEIVED' && <UserPlus className="h-3 w-3" />}
+                              <span className="hidden sm:inline">
+                                {user.friendshipStatus === 'NONE' && 'Add Friend'}
+                                {user.friendshipStatus === 'FRIENDS' && 'Friends'}
+                                {user.friendshipStatus === 'REQUEST_SENT' && 'Request Sent'}
+                                {user.friendshipStatus === 'REQUEST_RECEIVED' && 'Accept'}
+                              </span>
+                            </>
+                          )}
+                        </Button>
+
+                      {/* Follow Button */}
+                      <FollowButton
+                        targetUserId={user.id}
+                        isFollowing={isFollowing}
+                        onFollowChange={handleFollowChange}
+                        className="flex items-center gap-1 justify-center w-full"
+                        size="sm"
+                        showIcon={true}
+                      />
+                    </div>
                   </>
                 )}
               </div>
@@ -460,21 +756,30 @@ export default function UserProfilePage() {
                 </Badge>
               )}
             </TabsTrigger>
+            {isOwnProfile && (
+              <TabsTrigger value="saved">
+                <Bookmark className="h-4 w-4 mr-2" />
+                Saved Posts
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {user.points}
+            {/* Stats - Only show achievements and days active for other users, points only for own profile */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Show points only for own profile */}
+              {isOwnProfile && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {user.points}
+                      </div>
+                      <p className="text-sm text-gray-600">Points</p>
                     </div>
-                    <p className="text-sm text-gray-600">Points</p>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardContent className="pt-6">
@@ -591,6 +896,12 @@ export default function UserProfilePage() {
               ))}
             </div>
           </TabsContent>
+
+          {isOwnProfile && (
+            <TabsContent value="saved" className="space-y-4">
+              <SocialFeed mode="saved" />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

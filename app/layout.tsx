@@ -8,6 +8,9 @@ import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { CartProvider } from "@/components/cart-provider"
 import { SessionProviderWrapper } from "@/components/providers/session-provider"
+import { NavigationProvider } from "@/components/providers/navigation-provider"
+import { LoadingBar } from "@/components/ui/loading-bar"
+import { PageLoading } from "@/components/ui/page-loading"
 import { Toaster } from "@/components/ui/sonner"
 import { Suspense } from "react"
 
@@ -48,13 +51,17 @@ export default function RootLayout({
         </a>
         <Suspense fallback={<div>Loading...</div>}>
           <SessionProviderWrapper>
-            <CartProvider>
-              <SiteHeader />
-              <main id="main" className="min-h-[60vh]">
-                {children}
-              </main>
-              <SiteFooter />
-            </CartProvider>
+            <NavigationProvider>
+              <CartProvider>
+                <LoadingBar />
+                <PageLoading />
+                <SiteHeader />
+                <main id="main" className="min-h-[60vh]">
+                  {children}
+                </main>
+                <SiteFooter />
+              </CartProvider>
+            </NavigationProvider>
           </SessionProviderWrapper>
         </Suspense>
         <Toaster />

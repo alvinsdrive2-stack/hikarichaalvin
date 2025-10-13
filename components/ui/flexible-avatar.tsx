@@ -46,7 +46,7 @@ export function FlexibleAvatar({
 }: FlexibleAvatarProps) {
   const [currentSrc, setCurrentSrc] = useState(src)
 
-  const config = sizeConfig[size]
+  const config = sizeConfig[size] || sizeConfig.md
 
   // Update src when prop changes
   useEffect(() => {

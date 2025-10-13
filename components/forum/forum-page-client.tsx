@@ -17,7 +17,9 @@ const fetchUserData = async (userId: string): Promise<any> => {
   try {
     const response = await fetch(`/api/users/${userId}`)
     if (response.ok) {
-      const userData = await response.json()
+      const result = await response.json()
+      // Extract user data from the response structure
+      const userData = result.success ? result.data : result
       userCache.set(userId, userData)
       return userData
     }

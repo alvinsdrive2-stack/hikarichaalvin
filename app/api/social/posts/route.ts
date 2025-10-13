@@ -5,7 +5,9 @@ import {
   createSocialPost,
   getSocialPosts,
   getSocialPostById,
-  deleteSocialPost
+  deleteSocialPost,
+  getPrioritizedFeed,
+  getFollowingPosts
 } from '@/lib/social-db'
 
 export async function GET(request: NextRequest) {
@@ -14,12 +16,45 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = parseInt(searchParams.get('offset') || '0')
     const author_id = searchParams.get('author_id') || undefined
+    const feed_type = searchParams.get('feed_type') || 'all' // 'all', 'following', 'prioritized'
 
-    const posts = await getSocialPosts({ limit, offset, author_id })
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id
+
+    let posts
+
+    switch (feed_type) {
+      case 'following':
+        if (!userId) {
+          return NextResponse.json(
+            { success: false, error: 'Authentication required for following feed' },
+            { status: 401 }
+          )
+        }
+        posts = await getFollowingPosts(userId, { limit, offset })
+        break
+      case 'prioritized':
+        if (!userId) {
+          // Fallback to regular feed if not authenticated
+          posts = await getSocialPosts({ limit, offset, author_id })
+        } else {
+          posts = await getPrioritizedFeed(userId, { limit, offset })
+        }
+        break
+      default:
+        posts = await getSocialPosts({ limit, offset, author_id })
+        break
+    }
 
     return NextResponse.json({
       success: true,
-      data: posts
+      data: posts,
+      meta: {
+        feed_type,
+        limit,
+        offset,
+        count: posts.length
+      }
     })
   } catch (error) {
     console.error('Error fetching social posts:', error)
@@ -68,13 +103,22 @@ export async function POST(request: NextRequest) {
       author_id: session.user.id,
       author_name: user.name || session.user.name || 'Unknown',
       author_avatar: user.profilePhoto || user.avatar,
-      author_border: JSON.stringify(user.border || null),
+      author_border: user.border ? JSON.stringify(user.border) : null,
       media_urls
     })
 
     // Get the created post
     const post = await getSocialPostById(postId)
 
+    if (!post) {
+      console.error('Failed to retrieve created post with ID:', postId)
+      return NextResponse.json(
+        { success: false, error: 'Failed to retrieve created post' },
+        { status: 500 }
+      )
+    }
+
+    console.log('Successfully created post:', post.id)
     return NextResponse.json({
       success: true,
       data: post

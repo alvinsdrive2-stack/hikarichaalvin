@@ -3,18 +3,20 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
 
@@ -33,8 +35,9 @@ export default function LoginPage() {
         toast.error("Email atau password salah")
       } else {
         toast.success("Login berhasil!")
-        router.push("/")
-        router.refresh()
+        setTimeout(() => {
+          router.push("/")
+        }, 1000)
       }
     } catch (error) {
       toast.error("Terjadi kesalahan saat login")
@@ -44,58 +47,106 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-10">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold">Masuk</h1>
-        <p className="text-muted-foreground mt-2">Selamat datang kembali di HikariCha!</p>
-      </div>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-grid-black/[0.02] bg-[size:60px_60px]" />
 
-      <form onSubmit={handleSubmit} className="space-y-4" aria-label="Form masuk">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            placeholder="nama@contoh.com"
-            required
-            disabled={isLoading}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">Kata Sandi</Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            disabled={isLoading}
-          />
-        </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Masuk...
-            </>
-          ) : (
-            "Masuk"
-          )}
-        </Button>
-      </form>
+      <div className="relative w-full max-w-md">
+        {/* Back Button */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Kembali ke Beranda
+        </Link>
 
-      <div className="text-center mt-6 space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Belum punya akun?{" "}
-          <Link className="underline hover:text-primary" href="/auth/register">
-            Daftar
-          </Link>
-        </p>
-        <p className="text-sm">
-          <Link className="text-muted-foreground hover:text-primary" href="/">
-            ← Kembali ke beranda
-          </Link>
-        </p>
+        <Card className="shadow-lg border bg-card">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-primary to-primary/80 rounded-md flex items-center justify-center mb-4 shadow-lg">
+              <span className="text-primary-foreground text-2xl font-bold">H</span>
+            </div>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              Selamat Datang Kembali
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Masuk ke akun HikariCha Anda
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium text-foreground">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="nama@example.com"
+                  required
+                  className="h-11"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium text-foreground">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Masukkan password"
+                    required
+                    className="h-11 pr-10"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Masuk...
+                  </>
+                ) : (
+                  "Masuk"
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Belum punya akun?{" "}
+                <Link
+                  href="/auth/register"
+                  className="font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  Daftar sekarang
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

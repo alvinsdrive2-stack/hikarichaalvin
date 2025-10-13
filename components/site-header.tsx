@@ -3,23 +3,23 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { ShoppingCart, User, Users, Bell, Trophy, Home } from "lucide-react"
+import { ShoppingCart, User, Users, Bell, Trophy, Home, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useCart } from "@/components/cart-provider"
+import { NavLink } from "@/components/ui/nav-link"
 import { cn } from "@/lib/utils"
-import { AuthModal } from "@/components/auth/auth-modal"
 import { ProfileDropdown } from "@/components/auth/profile-dropdown"
 import { toast } from "sonner"
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
-  const [showAuthModal, setShowAuthModal] = useState(false)
   const { data: session } = useSession()
   const { count } = useCart()
   const [friendRequestCount, setFriendRequestCount] = useState(0)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
 
-  // Fetch friend request count
+  // Fetch friend request count and unread messages
   useEffect(() => {
     if (!session?.user?.id) return
 
@@ -35,10 +35,27 @@ export function SiteHeader() {
       }
     }
 
+    const fetchUnreadMessages = async () => {
+      try {
+        const response = await fetch(`/api/chat/conversations?userId=${session.user.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          const unreadCount = data.data.reduce((total: number, conv: any) => total + (conv.unreadCount || 0), 0)
+          setUnreadMessageCount(unreadCount)
+        }
+      } catch (error) {
+        console.error('Error fetching unread messages:', error)
+      }
+    }
+
     fetchFriendRequests()
+    fetchUnreadMessages()
 
     // Set up polling for real-time updates (every 30 seconds)
-    const interval = setInterval(fetchFriendRequests, 30000)
+    const interval = setInterval(() => {
+      fetchFriendRequests()
+      fetchUnreadMessages()
+    }, 30000)
 
     return () => clearInterval(interval)
   }, [session])
@@ -64,26 +81,26 @@ export function SiteHeader() {
         <ul className="hidden md:flex items-center gap-6">
           {session && (
             <li>
-              <Link href="/social" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform hover:shadow-md">
+              <NavLink href="/social" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border">
                 <Home className="size-4" />
                 <span className="hidden sm:inline">Social</span>
-              </Link>
+              </NavLink>
             </li>
           )}
           <li>
-            <Link href="/forum" className="px-3 py-2 rounded-md hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform">
+            <NavLink href="/forum" className="px-3 py-2 rounded-md">
               Forum
-            </Link>
+            </NavLink>
           </li>
           <li>
-            <Link href="/marketplace" className="px-3 py-2 rounded-md hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform">
+            <NavLink href="/marketplace" className="px-3 py-2 rounded-md">
               Marketplace
-            </Link>
+            </NavLink>
           </li>
           {session && (
             <>
             <li>
-              <Link href="/friends" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform hover:shadow-md">
+              <NavLink href="/friends" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border">
                 <Users className="size-4" />
                 <span className="hidden sm:inline">Friends</span>
                 {friendRequestCount > 0 && (
@@ -91,37 +108,43 @@ export function SiteHeader() {
                     {friendRequestCount > 99 ? '99+' : friendRequestCount}
                   </Badge>
                 )}
-              </Link>
+              </NavLink>
             </li>
             <li>
-              <Link href="/achievements" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform hover:shadow-md">
+              <NavLink href="/chat" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border">
+                <MessageSquare className="size-4" />
+                <span className="hidden sm:inline">Chat</span>
+                {unreadMessageCount > 0 && (
+                  <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-xs p-0 animate-pulse">
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </Badge>
+                )}
+              </NavLink>
+            </li>
+            <li>
+              <NavLink href="/achievements" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border">
                 <Trophy className="size-4" />
                 <span className="hidden sm:inline">Achievements</span>
-              </Link>
+              </NavLink>
             </li>
             </>
           )}
             <li>
-            <Link href="/marketplace#cart" className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-muted/50 transition-all duration-200 hover:scale-105 transform hover:shadow-md")}>
+            <NavLink href="/marketplace#cart" className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md border")}>
               <ShoppingCart className="size-4" />
               <span className="sr-only">{"Jumlah item di keranjang"}</span>
               <span aria-live="polite" className="min-w-[1rem] text-center">{count}</span>
-            </Link>
+            </NavLink>
           </li>
           <li>
             {session ? (
               <ProfileDropdown />
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAuthModal(true)}
-                className="inline-flex items-center gap-2 hover:scale-105 transform transition-all duration-200 hover:shadow-md active:scale-95"
-              >
+              <NavLink href="/auth/login" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border active:scale-95">
                 <User className="size-4" />
                 <span className="hidden sm:inline">Login/Register</span>
                 <span className="sm:hidden">Login</span>
-              </Button>
+              </NavLink>
             )}
           </li>
         </ul>
@@ -132,26 +155,26 @@ export function SiteHeader() {
           <ul className="px-4 py-3 flex flex-col gap-3">
             {session && (
               <li>
-                <Link href="/social" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+                <NavLink href="/social" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
                   <Home className="size-4" />
                   <span>Social</span>
-                </Link>
+                </NavLink>
               </li>
             )}
             <li>
-              <Link href="/forum" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+              <NavLink href="/forum" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md">
                 Forum
-              </Link>
+              </NavLink>
             </li>
             <li>
-              <Link href="/marketplace" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+              <NavLink href="/marketplace" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md">
                 Marketplace
-              </Link>
+              </NavLink>
             </li>
             {session && (
               <>
               <li>
-                <Link href="/friends" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+                <NavLink href="/friends" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
                   <Users className="size-4" />
                   <span>Friends</span>
                   {friendRequestCount > 0 && (
@@ -159,13 +182,24 @@ export function SiteHeader() {
                       {friendRequestCount > 99 ? '99+' : friendRequestCount}
                     </Badge>
                   )}
-                </Link>
+                </NavLink>
               </li>
               <li>
-                <Link href="/achievements" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+                <NavLink href="/chat" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md relative">
+                  <MessageSquare className="size-4" />
+                  <span>Chat</span>
+                  {unreadMessageCount > 0 && (
+                    <Badge variant="destructive" className="text-xs animate-pulse">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </Badge>
+                  )}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink href="/achievements" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
                   <Trophy className="size-4" />
                   <span>Achievements</span>
-                </Link>
+                </NavLink>
               </li>
               </>
             )}
@@ -177,28 +211,15 @@ export function SiteHeader() {
               {session ? (
                 <ProfileDropdown />
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowAuthModal(true)
-                    setOpen(false)
-                  }}
-                  className="inline-flex items-center gap-2 hover:scale-105 transform transition-all duration-200 hover:shadow-md active:scale-95"
-                >
+                <NavLink href="/auth/login" onClick={() => setOpen(false)} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border active:scale-95">
                   <User className="size-4" />
                   Login/Register
-                </Button>
+                </NavLink>
               )}
             </li>
           </ul>
         </div>
       )}
-
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
     </header>
   )
 }

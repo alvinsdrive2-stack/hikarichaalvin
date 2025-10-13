@@ -26,6 +26,7 @@ import { MessageBubble, TypingIndicator } from "./message-bubble";
 import { ChatInput } from "./chat-input";
 import { FlexibleAvatar } from "@/components/ui/flexible-avatar";
 import { useUserBorder } from "@/hooks/useUserBorder";
+import { useSocket } from "@/hooks/useSocket";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -93,6 +94,11 @@ export function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Socket.io integration
+  const { socket, isConnected, onNewMessage, onTypingIndicator, joinUser, joinConversation, leaveConversation, sendMessage, startTyping, stopTyping } = useSocket({
+    autoConnect: true
+  });
+
   const isOwnMessage = (senderId: string) => senderId === session?.user?.id;
   const isGroup = conversation.type === 'GROUP';
 
@@ -106,6 +112,84 @@ export function ChatWindow({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Socket.io effects
+  useEffect(() => {
+    if (isConnected && socket && session?.user?.id) {
+      // Join user to socket
+      joinUser({
+        userId: session.user.id,
+        name: session.user.name || 'User',
+        avatar: session.user.image
+      });
+
+      // Join conversation room
+      joinConversation(conversation.id);
+    }
+  }, [isConnected, socket, conversation.id, session, joinUser, joinConversation]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    // Listen for new messages
+    const unsubscribeNewMessage = onNewMessage((data) => {
+      if (data.conversationId === conversation.id && data.senderId !== session?.user?.id) {
+        const newMessage = {
+          id: data.message.id,
+          conversationId: data.message.conversationId,
+          senderId: data.message.senderId,
+          content: data.message.content,
+          type: data.message.type,
+          replyToId: data.message.replyTo,
+          replyTo: data.message.replyTo,
+          isEdited: data.message.isEdited,
+          reactions: data.message.reactions || [],
+          createdAt: data.message.createdAt,
+          updatedAt: data.message.updatedAt,
+          readBy: []
+        };
+        setMessages(prev => [...prev, newMessage]);
+        markAsRead();
+      }
+    });
+
+    // Listen for typing indicators
+    const unsubscribeTypingIndicator = onTypingIndicator((data) => {
+      if (data.conversationId === conversation.id && data.user.id !== session?.user?.id) {
+        setTypingUsers(prev => {
+          if (data.isTyping) {
+            const existing = prev.find(u => u.id === data.user.id);
+            if (!existing) {
+              return [...prev, {
+                id: data.user.id,
+                name: data.user.name,
+                image: data.user.image,
+                status: 'ONLINE',
+                role: 'MEMBER'
+              }];
+            }
+            return prev;
+          } else {
+            return prev.filter(u => u.id !== data.user.id);
+          }
+        });
+      }
+    });
+
+    return () => {
+      unsubscribeNewMessage?.();
+      unsubscribeTypingIndicator?.();
+    };
+  }, [socket, isConnected, conversation.id, session, onNewMessage, onTypingIndicator]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (socket && conversation.id) {
+        leaveConversation(conversation.id);
+      }
+    };
+  }, [socket, conversation.id, leaveConversation]);
 
   useEffect(() => {
     // Set up WebSocket connection for real-time updates
@@ -148,10 +232,29 @@ export function ChatWindow({
 
   const fetchMessages = async () => {
     try {
-      const response = await fetch(`/api/chat/conversations/${conversation.id}/messages`);
+      const response = await fetch(`/api/chat/messages?conversationId=${conversation.id}`);
       if (response.ok) {
         const data = await response.json();
-        setMessages(data.messages || []);
+        // Transform API data to match our interface
+        const transformedMessages = data.data.map((msg: any) => ({
+          id: msg.id,
+          conversationId: msg.conversation_id,
+          senderId: msg.sender_id,
+          content: msg.content,
+          type: msg.type,
+          replyToId: msg.reply_to,
+          replyTo: msg.replyToUser ? {
+            id: msg.replyToUser.id,
+            content: '', // Would need to fetch the original message
+            senderName: msg.replyToUser.name
+          } : undefined,
+          isEdited: msg.is_edited,
+          reactions: msg.reactions || [],
+          createdAt: msg.created_at,
+          updatedAt: msg.updated_at,
+          readBy: []
+        }));
+        setMessages(transformedMessages);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -161,9 +264,17 @@ export function ChatWindow({
   };
 
   const markAsRead = async () => {
+    if (!session?.user?.id) return;
+
     try {
       await fetch(`/api/chat/conversations/${conversation.id}/read`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: session.user.id
+        })
       });
     } catch (error) {
       console.error('Error marking as read:', error);
@@ -186,45 +297,54 @@ export function ChatWindow({
   };
 
   const handleSendMessage = async (content: string, type: 'TEXT' | 'IMAGE' | 'FILE', file?: File) => {
+    if (!session?.user?.id) return;
+
     try {
-      let messageData: any = {
+      const messageData = {
         conversationId: conversation.id,
+        senderId: session.user.id,
         content,
         type,
-        replyToId: replyingTo?.id
+        replyTo: replyingTo?.id
       };
 
-      if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('conversationId', conversation.id);
-        formData.append('content', content);
-        formData.append('type', type);
-        if (replyingTo?.id) {
-          formData.append('replyToId', replyingTo.id);
-        }
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageData)
+      });
 
-        const response = await fetch('/api/chat/messages/upload', {
-          method: 'POST',
-          body: formData
-        });
+      if (response.ok) {
+        const data = await response.json();
+        const newMessage = {
+          id: data.data.id,
+          conversationId: data.data.conversationId,
+          senderId: data.data.senderId,
+          content: data.data.content,
+          type: data.data.type,
+          replyToId: data.data.replyTo,
+          replyTo: replyingTo ? {
+            id: replyingTo.id,
+            content: replyingTo.content,
+            senderName: replyingTo.senderId === session.user.id ? 'You' : 'Other'
+          } : undefined,
+          isEdited: data.data.isEdited,
+          reactions: [],
+          createdAt: data.data.createdAt,
+          updatedAt: data.data.updatedAt,
+          readBy: []
+        };
+        setMessages(prev => [...prev, newMessage]);
 
-        if (response.ok) {
-          const message = await response.json();
-          setMessages(prev => [...prev, message]);
-        }
-      } else {
-        const response = await fetch('/api/chat/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(messageData)
-        });
-
-        if (response.ok) {
-          const message = await response.json();
-          setMessages(prev => [...prev, message]);
+        // Send real-time message via Socket.io
+        if (socket && isConnected) {
+          sendMessage({
+            conversationId: conversation.id,
+            message: newMessage,
+            senderId: session.user.id
+          });
         }
       }
 
@@ -235,11 +355,69 @@ export function ChatWindow({
   };
 
   const handleTypingStart = () => {
-    // Send typing indicator via WebSocket
+    if (!session?.user?.id) return;
+
+    // Send via Socket.io for real-time
+    if (socket && isConnected) {
+      startTyping({
+        conversationId: conversation.id,
+        user: {
+          id: session.user.id,
+          name: session.user.name || 'User',
+          image: session.user.image
+        }
+      });
+    }
+
+    // Also send via API for persistence
+    try {
+      fetch('/api/chat/typing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          userId: session.user.id,
+          isTyping: true
+        })
+      });
+    } catch (error) {
+      console.error('Error sending typing indicator:', error);
+    }
   };
 
   const handleTypingStop = () => {
-    // Stop typing indicator via WebSocket
+    if (!session?.user?.id) return;
+
+    // Send via Socket.io for real-time
+    if (socket && isConnected) {
+      stopTyping({
+        conversationId: conversation.id,
+        user: {
+          id: session.user.id,
+          name: session.user.name || 'User',
+          image: session.user.image
+        }
+      });
+    }
+
+    // Also send via API for persistence
+    try {
+      fetch('/api/chat/typing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          userId: session.user.id,
+          isTyping: false
+        })
+      });
+    } catch (error) {
+      console.error('Error stopping typing indicator:', error);
+    }
   };
 
   const handleReply = (message: Message) => {
@@ -327,9 +505,10 @@ export function ChatWindow({
   };
 
   const avatarData = getConversationAvatar();
-  const { border: userBorder } = useUserBorder(
-    conversation.type === 'DIRECT' ? conversation.participants.find(p => p.id !== session?.user?.id)?.id : session?.user?.id
-  );
+  const borderUserId = conversation.type === 'DIRECT'
+    ? conversation.participants.find(p => p.id !== session?.user?.id)?.id || session?.user?.id
+    : session?.user?.id;
+  const { border: userBorder } = useUserBorder(borderUserId);
 
   return (
     <Card className="h-full flex flex-col">

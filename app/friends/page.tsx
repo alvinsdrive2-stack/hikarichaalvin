@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Users, UserPlus, Search, RefreshCw } from "lucide-react"
+import { ArrowLeft, Users, UserPlus, Search, RefreshCw, UserCheck } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { FriendList, FindFriends, FriendSuggestions, FriendRequestCard } from "@/components/social/friend-system"
+import { FollowButton } from "@/components/social/follow-button"
+import { BorderDisplay } from "@/components/ui/border-display"
 
 interface User {
   id: string
@@ -39,6 +41,20 @@ interface FriendRequest {
   createdAt: string;
 }
 
+interface FollowingUser {
+  id: string
+  name: string
+  avatar?: string
+  border?: string
+  bio?: string
+  followerCount: number
+  followingCount: number
+  postCount: number
+  followedAt: string
+  isFollowing?: boolean
+  isFollowingBack?: boolean
+}
+
 export default function FriendsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -48,6 +64,18 @@ export default function FriendsPage() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([])
   const [receivedRequests, setReceivedRequests] = useState<FriendRequest[]>([])
+
+  // Following data
+  const [following, setFollowing] = useState<FollowingUser[]>([])
+  const [followers, setFollowers] = useState<FollowingUser[]>([])
+
+  // User stats
+  const [userStats, setUserStats] = useState({
+    friendCount: 0,
+    followerCount: 0,
+    followingCount: 0,
+    postCount: 0
+  })
 
   // Loading states
   const [loading, setLoading] = useState(true)
@@ -74,10 +102,13 @@ export default function FriendsPage() {
     if (!session?.user?.id) return
 
     try {
-      const [friendsRes, sentRes, receivedRes] = await Promise.all([
+      const [friendsRes, sentRes, receivedRes, followingRes, followersRes, statsRes] = await Promise.all([
         fetch('/api/friends?type=friends'),
         fetch('/api/friends?type=sent'),
-        fetch('/api/friends?type=received')
+        fetch('/api/friends?type=received'),
+        fetch('/api/social/follow?type=following&limit=50'),
+        fetch('/api/social/follow?type=followers&limit=50'),
+        fetch(`/api/users/${session.user.id}/stats`)
       ])
 
       if (friendsRes.ok) {
@@ -98,6 +129,32 @@ export default function FriendsPage() {
         if (receivedData.requests && receivedData.requests.length > 0) {
           setActiveTab("requests")
         }
+      }
+
+      // Fetch following data
+      if (followingRes.ok) {
+        const followingData = await followingRes.json()
+        if (followingData.success) {
+          setFollowing(followingData.data)
+        }
+      }
+
+      if (followersRes.ok) {
+        const followersData = await followersRes.json()
+        if (followersData.success) {
+          setFollowers(followersData.data)
+        }
+      }
+
+      // Fetch user stats for accurate counts
+      if (statsRes.ok) {
+        const statsData = await statsRes.json()
+        setUserStats({
+          friendCount: statsData.friendCount || 0,
+          followerCount: statsData.followerCount || 0,
+          followingCount: statsData.followingCount || 0,
+          postCount: statsData.postCount || 0
+        })
       }
     } catch (error) {
       console.error('Error fetching friends data:', error)
@@ -216,6 +273,35 @@ export default function FriendsPage() {
     toast.info('Chat feature coming soon!')
   }
 
+  const handleFollowChange = (userId: string, isFollowing: boolean) => {
+    // Update following state when unfollowing someone
+    if (!isFollowing && activeTab === 'following') {
+      setFollowing(prev => prev.filter(user => user.id !== userId))
+    }
+
+    // Update followers state when following back
+    if (isFollowing && activeTab === 'followers') {
+      setFollowers(prev =>
+        prev.map(user =>
+          user.id === userId ? { ...user, isFollowing: true } : user
+        )
+      )
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) return "Hari ini"
+    if (diffDays === 1) return "Kemarin"
+    if (diffDays < 7) return `${diffDays} hari lalu`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`
+    return `${Math.floor(diffDays / 30)} bulan lalu`
+  }
+
   // Show loading spinner while session is loading
   if (status === 'loading') {
     return (
@@ -279,7 +365,13 @@ export default function FriendsPage() {
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-sm">
-                {friends.length} Friends
+                {userStats.friendCount} Friends
+              </Badge>
+              <Badge variant="outline" className="text-sm">
+                {userStats.followerCount} Followers
+              </Badge>
+              <Badge variant="outline" className="text-sm">
+                {userStats.followingCount} Following
               </Badge>
               {receivedRequests.length > 0 && (
                 <Badge variant="destructive" className="text-sm">
@@ -293,13 +385,13 @@ export default function FriendsPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="all" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               All Friends
-              {friends.length > 0 && (
+              {userStats.friendCount > 0 && (
                 <Badge variant="secondary" className="ml-1">
-                  {friends.length}
+                  {userStats.friendCount}
                 </Badge>
               )}
             </TabsTrigger>
@@ -309,6 +401,15 @@ export default function FriendsPage() {
               {(sentRequests.length + receivedRequests.length) > 0 && (
                 <Badge variant="secondary" className="ml-1">
                   {sentRequests.length + receivedRequests.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="following" className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4" />
+              Following
+              {userStats.followingCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {userStats.followingCount}
                 </Badge>
               )}
             </TabsTrigger>
@@ -392,6 +493,119 @@ export default function FriendsPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="following" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCheck className="h-5 w-5" />
+                  Following & Followers
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Following Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Following ({userStats.followingCount})</h3>
+                    {following.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <UserCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Belum ada following</p>
+                        <p className="text-sm mt-2">Mulai follow pengguna lain untuk melihat mereka di sini</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {following.map((user) => (
+                          <div key={user.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50">
+                            <BorderDisplay
+                              border={
+                                user.border
+                                  ? { id: user.border, name: '', imageUrl: user.border, unlocked: true, rarity: 'COMMON' }
+                                  : { id: 'default', name: 'Default', imageUrl: '/borders/default.png', unlocked: true, rarity: 'COMMON' }
+                              }
+                              userAvatar={user.avatar}
+                              userName={user.name}
+                              size="profile"
+                              showUserInfo={true}
+                              orientation="horizontal"
+                              className="flex-1"
+                            />
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <div className="text-sm text-muted-foreground">
+                                  {user.postCount} postingan
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Following sejak {formatDate(user.followedAt)}
+                                </div>
+                              </div>
+                              <FollowButton
+                                targetUserId={user.id}
+                                isFollowing={true}
+                                onFollowChange={(isFollowing) => handleFollowChange(user.id, isFollowing)}
+                                size="sm"
+                                showIcon={false}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Followers Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Followers ({userStats.followerCount})</h3>
+                    {followers.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Belum ada followers</p>
+                        <p className="text-sm mt-2">Pengguna lain akan muncul di sini ketika mereka mulai follow Anda</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {followers.map((user) => (
+                          <div key={user.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50">
+                            <BorderDisplay
+                              border={
+                                user.border
+                                  ? { id: user.border, name: '', imageUrl: user.border, unlocked: true, rarity: 'COMMON' }
+                                  : { id: 'default', name: 'Default', imageUrl: '/borders/default.png', unlocked: true, rarity: 'COMMON' }
+                              }
+                              userAvatar={user.avatar}
+                              userName={user.name}
+                              size="profile"
+                              showUserInfo={true}
+                              orientation="horizontal"
+                              className="flex-1"
+                            />
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <div className="text-sm text-muted-foreground">
+                                  {user.postCount} postingan
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {user.followerCount} followers
+                                </div>
+                              </div>
+                              <FollowButton
+                                targetUserId={user.id}
+                                isFollowing={user.isFollowing}
+                                onFollowChange={(isFollowing) => handleFollowChange(user.id, isFollowing)}
+                                size="sm"
+                                showIcon={false}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          
           <TabsContent value="find" className="space-y-6">
             <FindFriends
               onSendFriendRequest={handleSendFriendRequest}

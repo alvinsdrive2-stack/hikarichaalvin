@@ -66,7 +66,7 @@ export async function POST(
       author_id: session.user.id,
       author_name: user.name || session.user.name || 'Unknown',
       author_avatar: user.profilePhoto || user.avatar,
-      author_border: JSON.stringify(user.border || null)
+      author_border: user.border ? JSON.stringify(user.border) : null
     })
 
     // Get updated comments
