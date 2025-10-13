@@ -87,6 +87,7 @@ export const authOptionsRaw: NextAuthOptions = {
       if (user) {
         token.role = user.role
         token.id = user.id
+        token.name = user.name
         token.image = user.image
         token.bio = user.bio
         token.location = user.location
@@ -98,6 +99,7 @@ export const authOptionsRaw: NextAuthOptions = {
       if (token) {
         session.user.id = token.id as string
         session.user.role = token.role as string
+        session.user.name = token.name as string
         session.user.image = token.image as string
         session.user.bio = token.bio as string
         session.user.location = token.location as string

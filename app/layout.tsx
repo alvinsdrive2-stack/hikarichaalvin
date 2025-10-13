@@ -11,7 +11,9 @@ import { SessionProviderWrapper } from "@/components/providers/session-provider"
 import { NavigationProvider } from "@/components/providers/navigation-provider"
 import { LoadingBar } from "@/components/ui/loading-bar"
 import { PageLoading } from "@/components/ui/page-loading"
-import { Toaster } from "@/components/ui/sonner"
+import { Toaster } from "@/components/ui/toaster"
+import { ChatProvider } from "@/contexts/ChatContext"
+import { FloatingChatProvider } from "@/components/chat/floating-chat-provider"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
@@ -53,13 +55,17 @@ export default function RootLayout({
           <SessionProviderWrapper>
             <NavigationProvider>
               <CartProvider>
-                <LoadingBar />
-                <PageLoading />
-                <SiteHeader />
-                <main id="main" className="min-h-[60vh]">
-                  {children}
-                </main>
-                <SiteFooter />
+                <ChatProvider>
+                  <FloatingChatProvider>
+                    <LoadingBar />
+                    <PageLoading />
+                    <SiteHeader />
+                    <main id="main" className="min-h-[60vh]">
+                      {children}
+                    </main>
+                    <SiteFooter />
+                  </FloatingChatProvider>
+                </ChatProvider>
               </CartProvider>
             </NavigationProvider>
           </SessionProviderWrapper>

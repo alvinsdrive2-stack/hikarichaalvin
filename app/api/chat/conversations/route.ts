@@ -5,8 +5,14 @@ const dbConfig = {
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'hikariCha_db'
+  database: 'hikariCha_db',
+  connectionLimit: 10,
+  acquireTimeout: 60000,
+  timeout: 60000,
 }
+
+// Create connection pool
+const pool = mysql.createPool(dbConfig)
 
 export async function GET(request: NextRequest) {
   let connection
@@ -22,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    connection = await mysql.createConnection(dbConfig)
+    connection = await pool.getConnection()
 
     let query = `
       SELECT
@@ -104,7 +110,7 @@ export async function GET(request: NextRequest) {
     )
   } finally {
     if (connection) {
-      await connection.end()
+      connection.release() // Release back to pool instead of closing
     }
   }
 }
@@ -136,7 +142,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    connection = await mysql.createConnection(dbConfig)
+    connection = await pool.getConnection()
 
     // Check if direct conversation already exists
     if (type === 'DIRECT') {
@@ -211,7 +217,7 @@ export async function POST(request: NextRequest) {
     )
   } finally {
     if (connection) {
-      await connection.end()
+      connection.release() // Release back to pool instead of closing
     }
   }
 }

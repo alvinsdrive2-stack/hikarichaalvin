@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { ShoppingCart, User, Users, Bell, Trophy, Home, MessageSquare } from "lucide-react"
+import { ShoppingCart, User, Users, Bell, Trophy, Home, MessageSquare, MessageCircle, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useCart } from "@/components/cart-provider"
@@ -61,86 +61,67 @@ export function SiteHeader() {
   }, [session])
 
   return (
-    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 transition-all duration-300">
-      <nav aria-label="Navigasi utama" className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="inline-flex items-center gap-2 group">
-            <span aria-hidden className="size-6 rounded-md bg-gradient-to-br from-primary to-primary/80 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105" title="HikariCha" />
-            <span className="font-medium group-hover:text-primary transition-colors duration-200">HikariCha</span>
+    <header className="border-b border-border/50 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 sticky top-0 z-50 transition-all duration-300 shadow-sm">
+      <nav aria-label="Navigasi utama" className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/" className="inline-flex items-center gap-3 group">
+            <span aria-hidden className="size-8 rounded-xl bg-gradient-to-br from-primary to-primary/90 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 flex items-center justify-center" title="HikariCha">
+              <span className="text-white font-bold text-sm">HC</span>
+            </span>
+            <span className="font-semibold text-lg group-hover:text-primary transition-colors duration-200">HikariCha</span>
           </Link>
         </div>
 
         <button
           aria-label="Buka menu"
-          className="md:hidden px-3 py-2 rounded-md border hover:bg-muted/50 transition-colors duration-200 active:scale-95 transform"
+          className="md:hidden px-4 py-2 rounded-lg border border-border bg-background hover:bg-muted/50 transition-all duration-200 active:scale-95 shadow-sm"
           onClick={() => setOpen((v) => !v)}
         >
           Menu
         </button>
 
-        <ul className="hidden md:flex items-center gap-6">
+        <ul className="hidden md:flex items-center gap-1">
           {session && (
             <li>
-              <NavLink href="/social" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border">
+              <NavLink href="/social" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
                 <Home className="size-4" />
                 <span className="hidden sm:inline">Social</span>
               </NavLink>
             </li>
           )}
           <li>
-            <NavLink href="/forum" className="px-3 py-2 rounded-md">
-              Forum
+            <NavLink href="/forum" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
+              <MessageCircle className="size-4" />
+              <span>Forum</span>
             </NavLink>
           </li>
           <li>
-            <NavLink href="/marketplace" className="px-3 py-2 rounded-md">
-              Marketplace
+            <NavLink href="/marketplace" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
+              <ShoppingBag className="size-4" />
+              <span>Marketplace</span>
             </NavLink>
           </li>
           {session && (
             <>
-            <li>
-              <NavLink href="/friends" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border">
-                <Users className="size-4" />
-                <span className="hidden sm:inline">Friends</span>
-                {friendRequestCount > 0 && (
-                  <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-xs p-0 animate-pulse">
-                    {friendRequestCount > 99 ? '99+' : friendRequestCount}
-                  </Badge>
-                )}
-              </NavLink>
-            </li>
-            <li>
-              <NavLink href="/chat" className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border">
-                <MessageSquare className="size-4" />
-                <span className="hidden sm:inline">Chat</span>
-                {unreadMessageCount > 0 && (
-                  <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-xs p-0 animate-pulse">
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </Badge>
-                )}
-              </NavLink>
-            </li>
-            <li>
-              <NavLink href="/achievements" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border">
-                <Trophy className="size-4" />
-                <span className="hidden sm:inline">Achievements</span>
-              </NavLink>
-            </li>
-            </>
+              </>
           )}
             <li>
-            <NavLink href="/marketplace#cart" className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md border")}>
+            <NavLink href="/marketplace#cart" className={cn("relative inline-flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium")}>
               <ShoppingCart className="size-4" />
+              <span className="hidden sm:inline">Cart</span>
               <span className="sr-only">{"Jumlah item di keranjang"}</span>
-              <span aria-live="polite" className="min-w-[1rem] text-center">{count}</span>
+              {count > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                  {count > 99 ? '99+' : count}
+                </span>
+              )}
             </NavLink>
           </li>
           <li>
             {session ? (
               <ProfileDropdown />
             ) : (
-              <NavLink href="/auth/login" className="inline-flex items-center gap-2 px-3 py-2 rounded-md border active:scale-95">
+              <NavLink href="/auth/login" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-200 font-medium shadow-sm hover:shadow-md">
                 <User className="size-4" />
                 <span className="hidden sm:inline">Login/Register</span>
                 <span className="sm:hidden">Login</span>
@@ -151,69 +132,45 @@ export function SiteHeader() {
       </nav>
 
       {open && (
-        <div className="md:hidden border-t bg-background/95 backdrop-blur animate-in slide-in-from-top-2 duration-300">
-          <ul className="px-4 py-3 flex flex-col gap-3">
+        <div className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur-md animate-in slide-in-from-top-2 duration-300 shadow-lg">
+          <ul className="px-6 py-4 flex flex-col gap-2">
             {session && (
               <li>
-                <NavLink href="/social" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
+                <NavLink href="/social" onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
                   <Home className="size-4" />
                   <span>Social</span>
                 </NavLink>
               </li>
             )}
             <li>
-              <NavLink href="/forum" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md">
-                Forum
+              <NavLink href="/forum" onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
+                <MessageCircle className="size-4" />
+                <span>Forum</span>
               </NavLink>
             </li>
             <li>
-              <NavLink href="/marketplace" onClick={() => setOpen(false)} className="block px-3 py-2 rounded-md">
-                Marketplace
+              <NavLink href="/marketplace" onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
+                <ShoppingBag className="size-4" />
+                <span>Marketplace</span>
               </NavLink>
             </li>
             {session && (
               <>
-              <li>
-                <NavLink href="/friends" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
-                  <Users className="size-4" />
-                  <span>Friends</span>
-                  {friendRequestCount > 0 && (
-                    <Badge variant="destructive" className="text-xs animate-pulse">
-                      {friendRequestCount > 99 ? '99+' : friendRequestCount}
-                    </Badge>
-                  )}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink href="/chat" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md relative">
-                  <MessageSquare className="size-4" />
-                  <span>Chat</span>
-                  {unreadMessageCount > 0 && (
-                    <Badge variant="destructive" className="text-xs animate-pulse">
-                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                    </Badge>
-                  )}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink href="/achievements" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md">
-                  <Trophy className="size-4" />
-                  <span>Achievements</span>
-                </NavLink>
-              </li>
-              </>
+                </>
             )}
-              <li className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors duration-200">
+              <li className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 font-medium">
               <ShoppingCart className="size-4" />
-              <span aria-live="polite">Keranjang: {count}</span>
+              <span>Cart{count > 0 && ` (${count})`}</span>
             </li>
             <li>
               {session ? (
-                <ProfileDropdown />
+                <div className="px-4 py-2">
+                  <ProfileDropdown />
+                </div>
               ) : (
-                <NavLink href="/auth/login" onClick={() => setOpen(false)} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border active:scale-95">
+                <NavLink href="/auth/login" onClick={() => setOpen(false)} className="inline-flex items-center gap-3 px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-200 font-medium shadow-sm">
                   <User className="size-4" />
-                  Login/Register
+                  <span>Login/Register</span>
                 </NavLink>
               )}
             </li>

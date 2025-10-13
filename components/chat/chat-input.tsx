@@ -10,8 +10,6 @@ import {
   Paperclip,
   Image,
   Smile,
-  Mic,
-  MicOff,
   X,
   File
 } from "lucide-react";
@@ -21,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmojiPicker } from "./emoji-picker";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
@@ -37,12 +36,6 @@ interface ChatInputProps {
   onCancelReply?: () => void;
 }
 
-interface RecordingState {
-  isRecording: boolean;
-  duration: number;
-  audioBlob?: Blob;
-}
-
 export function ChatInput({
   onSendMessage,
   onTypingStart,
@@ -55,15 +48,11 @@ export function ChatInput({
   const { data: session } = useSession();
   const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
   const [isSending, setIsSending] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -92,16 +81,23 @@ export function ChatInput({
   const handleSendMessage = async () => {
     if ((!message.trim() && !selectedFile) || isSending || disabled) return;
 
+    console.log('=== SENDING MESSAGE ===');
+    console.log('Message:', message.trim());
+    console.log('Selected file:', selectedFile);
+
     setIsSending(true);
 
     try {
       if (selectedFile) {
         const fileType = selectedFile.type.startsWith('image/') ? 'IMAGE' : 'FILE';
+        console.log('Sending file message:', fileType);
         await onSendMessage(message.trim(), fileType, selectedFile);
       } else {
+        console.log('Sending text message');
         await onSendMessage(message.trim(), 'TEXT');
       }
 
+      console.log('Message sent successfully');
       setMessage("");
       setSelectedFile(null);
       if (textareaRef.current) {
@@ -111,6 +107,7 @@ export function ChatInput({
       console.error('Error sending message:', error);
     } finally {
       setIsSending(false);
+      console.log('=== END SENDING MESSAGE ===');
     }
   };
 
@@ -140,66 +137,14 @@ export function ChatInput({
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      const chunks: Blob[] = [];
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-        const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, {
-          type: 'audio/webm'
-        });
-
-        // Convert to file and send
-        setSelectedFile(audioFile);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingDuration(0);
-
-      // Start recording duration timer
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Could not access microphone');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setRecordingDuration(0);
-
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-      }
-    }
-  };
-
-  const formatRecordingDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    textareaRef.current?.focus();
   };
 
   const getFileIcon = (file: File) => {
     if (file.type.startsWith('image/')) return <Image className="h-4 w-4" />;
-    if (file.type.startsWith('audio/')) return <Mic className="h-4 w-4" />;
+    if (file.type.startsWith('audio/')) return <File className="h-4 w-4" />;
     return <File className="h-4 w-4" />;
   };
 
@@ -211,7 +156,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {/* Reply indicator */}
       {replyTo && (
         <div className="flex items-center justify-between p-2 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
@@ -263,47 +208,23 @@ export function ChatInput({
         </Card>
       )}
 
-      {/* Recording indicator */}
-      {isRecording && (
-        <Card className="bg-red-50 border-red-200">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-sm text-red-700">Recording...</span>
-              </div>
-              <span className="text-sm text-red-600 font-medium">
-                {formatRecordingDuration(recordingDuration)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={stopRecording}
-                className="ml-auto text-red-600 hover:text-red-700"
-              >
-                <MicOff className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
+      
       {/* Main input */}
       <Card className="border-2">
-        <CardContent className="p-3">
-          <div className="flex items-end gap-2">
+        <CardContent className="p-1">
+          <div className="flex items-center gap-1">
             {/* Left side actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0">
               {/* File upload */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0"
+                    className="h-7 w-7 p-0"
                     disabled={disabled}
                   >
-                    <Paperclip className="h-4 w-4" />
+                    <Paperclip className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start">
@@ -318,30 +239,8 @@ export function ChatInput({
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Voice recording */}
-              {!message.trim() && !selectedFile ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    isRecording && "text-red-600"
-                  )}
-                  disabled={disabled}
-                  onClick={isRecording ? stopRecording : startRecording}
-                >
-                  {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={disabled}
-                >
-                  <Smile className="h-4 w-4" />
-                </Button>
-              )}
+              {/* Emoji picker */}
+              <EmojiPicker onEmojiSelect={handleEmojiSelect} disabled={disabled} />
             </div>
 
             {/* Message input */}
@@ -352,7 +251,7 @@ export function ChatInput({
               onKeyPress={handleKeyPress}
               placeholder={placeholder}
               disabled={disabled}
-              className="min-h-[40px] max-h-[120px] resize-none border-0 focus-visible:ring-0 bg-transparent"
+              className="min-h-[32px] max-h-[100px] resize-none border-0 focus-visible:ring-0 bg-transparent text-sm py-1"
               rows={1}
             />
 
@@ -360,16 +259,16 @@ export function ChatInput({
             <Button
               size="sm"
               onClick={handleSendMessage}
-              disabled={(!message.trim() && !selectedFile && !isRecording) || disabled || isSending}
+              disabled={(!message.trim() && !selectedFile) || disabled || isSending}
               className={cn(
-                "h-8 px-3",
+                "h-7 w-7 p-0",
                 (message.trim() || selectedFile) && "bg-blue-500 hover:bg-blue-600"
               )}
             >
               {isSending ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-3 w-3" />
               )}
             </Button>
           </div>

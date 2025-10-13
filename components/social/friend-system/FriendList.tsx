@@ -58,7 +58,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-const getStatusText = (status: string, lastSeen: string) => {
+const getStatusText = (status: string, lastSeen?: string) => {
   switch (status) {
     case 'ONLINE':
       return 'Online';
@@ -67,14 +67,40 @@ const getStatusText = (status: string, lastSeen: string) => {
     case 'BUSY':
       return 'Busy';
     default:
-      const lastSeenDate = new Date(lastSeen);
-      const now = new Date();
-      const diffInMinutes = Math.floor((now.getTime() - lastSeenDate.getTime()) / (1000 * 60));
+      // Handle missing or invalid lastSeen
+      if (!lastSeen) return 'Offline';
 
-      if (diffInMinutes < 1) return 'Just now';
-      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-      return `${Math.floor(diffInMinutes / 1440)}d ago`;
+      try {
+        const lastSeenDate = new Date(lastSeen);
+        const now = new Date();
+
+        // Check if date is invalid
+        if (isNaN(lastSeenDate.getTime())) return 'Offline';
+
+        const diffInMs = now.getTime() - lastSeenDate.getTime();
+
+        // If date is in future, show as offline
+        if (diffInMs < 0) return 'Offline';
+
+        const diffInSeconds = Math.floor(diffInMs / 1000);
+        const diffInMinutes = Math.floor(diffInSeconds / 60);
+        const diffInHours = Math.floor(diffInMinutes / 60);
+        const diffInDays = Math.floor(diffInHours / 24);
+
+        if (diffInSeconds < 30) return 'Just now';
+        if (diffInSeconds < 60) return '30s ago';
+        if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+        if (diffInHours < 24) return `${diffInHours}h ago`;
+        if (diffInDays < 7) return `${diffInDays}d ago`;
+
+        // For longer periods, show actual date
+        return lastSeenDate.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch (error) {
+        return 'Offline';
+      }
   }
 };
 
@@ -86,8 +112,13 @@ const FriendListItem: React.FC<{
 }> = ({ friend, onStartChat, onRemoveFriend, userBorder }) => {
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Safety check - if friend data is invalid, don't render
+  if (!friend?.friend?.id) {
+    return null;
+  }
+
   const handleRemoveFriend = async () => {
-    if (!onRemoveFriend) return;
+    if (!onRemoveFriend || !friend?.friend?.id) return;
 
     setActionLoading(true);
     try {
@@ -101,7 +132,7 @@ const FriendListItem: React.FC<{
   };
 
   const handleStartChat = () => {
-    if (onStartChat) {
+    if (onStartChat && friend?.friend?.id) {
       onStartChat(friend.friend.id);
     }
   };
@@ -129,7 +160,7 @@ const FriendListItem: React.FC<{
       {/* Friend Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center space-x-2">
-          <h4 className="font-medium text-sm truncate">{friend.friend.name}</h4>
+          <h4 className="font-medium text-sm truncate">{friend.friend.name || 'Unknown User'}</h4>
           {friend.friend.userStatus?.status === 'ONLINE' && (
             <Badge variant="default" className="text-xs px-1.5 py-0.5">
               Online
@@ -202,15 +233,19 @@ export const FriendList: React.FC<FriendListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const { data: session } = useSession();
 
-  // Get user IDs for border fetching
-  const userIds = friends?.map(friend => friend.friend.id) || [];
+  // Get user IDs for border fetching with safety checks
+  const userIds = friends
+    ?.filter(friend => friend?.friend?.id)
+    .map(friend => friend.friend.id) || [];
   const { borders, loading: bordersLoading } = useUserBorders(userIds);
 
-  // Filter friends based on search query
+  // Filter friends based on search query with safety checks
   const filteredFriends = friends?.filter(friend =>
-    friend.friend.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    friend.friend.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    friend.friend.customStatus?.toLowerCase().includes(searchQuery.toLowerCase())
+    friend?.friend && (
+      friend.friend.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      friend.friend.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      friend.friend.customStatus?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   ) || [];
 
   // Separate online and offline friends

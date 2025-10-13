@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { io, Socket } from 'socket.io-client'
 
 interface UseSocketOptions {
@@ -14,9 +15,12 @@ interface OnlineUser {
   socketId: string
   userId: string
   name: string
+  avatar?: string
+  joinedAt: Date
 }
 
 export const useSocket = (options: UseSocketOptions = {}) => {
+  const { data: session } = useSession()
   const {
     autoConnect = true,
     reconnection = true,
@@ -31,15 +35,21 @@ export const useSocket = (options: UseSocketOptions = {}) => {
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
-    if (!autoConnect) return
+    if (!autoConnect || !session?.user) return
 
-    // Initialize socket connection
+    // Initialize socket connection with authentication
     const newSocket = io({
       path: '/api/socket/io',
       addTrailingSlash: false,
       reconnection,
       reconnectionDelay,
-      reconnectionAttempts
+      reconnectionAttempts,
+      auth: {
+        token: session.accessToken || session.user.id, // Use access token if available
+        userId: session.user.id,
+        name: session.user.name,
+        avatar: session.user.image
+      }
     })
 
     socketRef.current = newSocket
@@ -71,7 +81,7 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       setOnlineUsers(prev => {
         const existing = prev.findIndex(u => u.userId === user.userId)
         if (existing === -1) {
-          return [...prev, { socketId: user.socketId, userId: user.userId, name: user.name }]
+          return [...prev, { socketId: user.socketId, userId: user.userId, name: user.name, avatar: user.avatar, joinedAt: new Date() }]
         }
         return prev
       })
@@ -79,6 +89,16 @@ export const useSocket = (options: UseSocketOptions = {}) => {
 
     newSocket.on('user:offline', (user: { userId: string, name: string, onlineCount: number }) => {
       setOnlineUsers(prev => prev.filter(u => u.userId !== user.userId))
+    })
+
+    newSocket.on('users:online_count', (count: number) => {
+      console.log('Online users count:', count)
+    })
+
+    // Error handling
+    newSocket.on('error', (error) => {
+      console.error('Socket error:', error)
+      setConnectionError(error.message)
     })
 
     setSocket(newSocket)
@@ -90,7 +110,7 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         socketRef.current = null
       }
     }
-  }, [autoConnect, reconnection, reconnectionDelay, reconnectionAttempts])
+  }, [autoConnect, reconnection, reconnectionDelay, reconnectionAttempts, session])
 
   // Socket methods
   const joinUser = (userData: { userId: string, name: string, avatar?: string }) => {

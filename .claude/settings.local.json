@@ -12,7 +12,8 @@
       "Bash(npx kill-port:*)",
       "Bash(npx prisma migrate dev:*)",
       "Bash(npx prisma migrate:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

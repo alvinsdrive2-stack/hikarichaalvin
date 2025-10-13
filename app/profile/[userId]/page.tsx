@@ -16,6 +16,7 @@ import { FriendList } from "@/components/social/friend-system"
 import { FollowButton } from "@/components/social/follow-button"
 import { User } from "lucide-react"
 import { SocialFeed } from "@/components/social/social-feed/social-feed"
+import { useChat } from "@/contexts/ChatContext"
 
 interface User {
   id: string
@@ -72,6 +73,7 @@ export default function UserProfilePage() {
   const { userId } = useParams()
   const { data: session } = useSession()
   const router = useRouter()
+  const { actions: chatActions } = useChat()
 
   const [user, setUser] = useState<User | null>(null)
   const [achievements, setAchievements] = useState<Achievement[]>([])
@@ -361,8 +363,27 @@ export default function UserProfilePage() {
       if (response.ok) {
         const data = await response.json();
         toast.success('Chat started!');
-        // Navigate to chat page with the new conversation
-        router.push(`/chat?conversation=${data.data.conversationId}`);
+
+        // Create conversation data for floating chat
+        const conversation = {
+          id: data.data.conversationId,
+          type: 'DIRECT' as const,
+          participants: [
+            {
+              id: session.user.id,
+              name: session.user.name || 'You',
+              image: session.user.image
+            },
+            {
+              id: user?.id,
+              name: user?.name || 'Unknown',
+              image: user?.image
+            }
+          ].filter(p => p.id) // Filter out any undefined participants
+        };
+
+        // Open floating chat instead of navigating to chat page
+        chatActions.openChat(data.data.conversationId, conversation);
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to start chat');
@@ -429,6 +450,34 @@ export default function UserProfilePage() {
         return <Trophy className="h-4 w-4" />
       default:
         return <Trophy className="h-4 w-4" />
+    }
+  }
+
+  // Get badge styling based on rarity (matching forum colors)
+  const getBadgeStyling = (rarity?: string) => {
+    const rarityLower = (rarity || 'common').toLowerCase()
+
+    switch (rarityLower) {
+      case 'bronze':
+        return 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+      case 'silver':
+        return 'bg-zinc-100 text-zinc-800 border-zinc-200 hover:bg-zinc-200'
+      case 'gold':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'
+      case 'common':
+        return 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'
+      case 'uncommon':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200'
+      case 'rare':
+        return 'bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-200'
+      case 'epic':
+        return 'bg-violet-100 text-violet-800 border-violet-200 hover:bg-violet-200'
+      case 'legendary':
+        return 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+      case 'mythic':
+        return 'bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'
     }
   }
 
@@ -512,17 +561,7 @@ export default function UserProfilePage() {
                   {userBorder?.rarity && (
                     <Badge
                       variant="outline"
-                      className={`text-xs font-medium ${
-                        userBorder.rarity === 'BRONZE' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                        userBorder.rarity === 'SILVER' ? 'bg-zinc-100 text-zinc-800 border-zinc-200' :
-                        userBorder.rarity === 'GOLD' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                        userBorder.rarity === 'COMMON' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-                        userBorder.rarity === 'RARE' ? 'bg-sky-100 text-sky-800 border-sky-200' :
-                        userBorder.rarity === 'EPIC' ? 'bg-violet-100 text-violet-800 border-violet-200' :
-                        userBorder.rarity === 'LEGENDARY' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                        userBorder.rarity === 'MYTHIC' ? 'bg-rose-100 text-rose-800 border-rose-200' :
-                        'bg-gray-100 text-gray-800 border-gray-200'
-                      }`}
+                      className={`text-xs font-medium ${getBadgeStyling(userBorder.rarity)}`}
                     >
                       {userBorder.rarity.charAt(0).toUpperCase() + userBorder.rarity.slice(1).toLowerCase()} Member
                     </Badge>
@@ -662,32 +701,27 @@ export default function UserProfilePage() {
                   </Button>
                 ) : (
                   <>
-                    {user.friendshipStatus === 'FRIENDS' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          onClick={() => handleStartChat(user.id)}
-                          variant="outline"
-                          className="flex items-center gap-1"
-                          size="sm"
-                          title="Start a conversation"
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                          <span className="hidden sm:inline">Chat</span>
-                        </Button>
-
-                        {/* Empty space for balance when friends */}
-                        <div></div>
-                      </div>
-                    )}
-
                     <div className="flex flex-col gap-2">
+                      {/* Chat Button - Same size as follow button */}
+                      <Button
+                        onClick={() => handleStartChat(user.id)}
+                        variant="outline"
+                        className="flex items-center gap-1 justify-center w-full h-8"
+                        size="sm"
+                        title="Start a conversation"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        <span className="hidden sm:inline">Chat</span>
+                      </Button>
+
+                      {/* Friend Request Button */}
                       <Button
                           onClick={user.friendshipStatus === 'NONE' ? handleSendFriendRequest :
                                  user.friendshipStatus === 'FRIENDS' ? handleRemoveFriend :
                                  user.friendshipStatus === 'REQUEST_SENT' ? handleCancelRequest :
                                  handleAcceptRequest}
                           disabled={friendActionLoading}
-                          className={`flex items-center gap-1 h-8 ${
+                          className={`flex items-center gap-1 justify-center w-full h-8 ${
                             user.friendshipStatus === 'NONE' ? 'bg-blue-600 hover:bg-blue-700 text-white' :
                             user.friendshipStatus === 'FRIENDS' ? 'bg-green-600 hover:bg-green-700 text-white' :
                             user.friendshipStatus === 'REQUEST_SENT' ? 'bg-gray-500 hover:bg-gray-600 text-white' :
@@ -724,7 +758,7 @@ export default function UserProfilePage() {
                         targetUserId={user.id}
                         isFollowing={isFollowing}
                         onFollowChange={handleFollowChange}
-                        className="flex items-center gap-1 justify-center w-full"
+                        className="flex items-center gap-1 justify-center w-full h-8"
                         size="sm"
                         showIcon={true}
                       />

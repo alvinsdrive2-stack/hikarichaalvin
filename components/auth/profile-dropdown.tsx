@@ -8,16 +8,41 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BorderPreview } from "@/components/ui/border-preview"
 import { useProfileRealtime } from "@/hooks/useProfileRealtime"
 import { useRealtimeSession } from "@/hooks/useRealtimeSession"
-import { User, LogOut, ShoppingBag, Coins, Star, Trophy } from "lucide-react"
+import { User, LogOut, ShoppingBag, Coins, Star, Trophy, Users } from "lucide-react"
 
 export function ProfileDropdown() {
   const { data: originalSession } = useSession()
   const { session, fetchFreshUserData } = useRealtimeSession()
   const [isOpen, setIsOpen] = useState(false)
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string>("")
+  const [friendRequestCount, setFriendRequestCount] = useState(0)
 
   // Use real-time profile hook
   const { userBorder, userPoints, fetchProfileData } = useProfileRealtime()
+
+  // Fetch friend request count
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const fetchFriendRequests = async () => {
+      try {
+        const response = await fetch('/api/friends?type=received')
+        if (response.ok) {
+          const data = await response.json()
+          setFriendRequestCount(data.requests?.length || 0)
+        }
+      } catch (error) {
+        console.error('Error fetching friend requests:', error)
+      }
+    }
+
+    fetchFriendRequests()
+
+    // Set up polling for real-time updates (every 30 seconds)
+    const interval = setInterval(fetchFriendRequests, 30000)
+
+    return () => clearInterval(interval)
+  }, [session])
 
   // Function to extract timestamp from image URL or add new one
   const getAvatarUrlWithTimestamp = (imageUrl: string | null | undefined) => {
@@ -245,6 +270,19 @@ export function ProfileDropdown() {
               >
                 <User className="h-4 w-4" />
                 <span>Profile</span>
+              </button>
+
+              <button
+                className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-3 text-sm relative"
+                onClick={() => window.location.href = '/friends'}
+              >
+                <Users className="h-4 w-4" />
+                <span>Friends</span>
+                {friendRequestCount > 0 && (
+                  <span className="absolute right-3 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                    {friendRequestCount > 99 ? '99+' : friendRequestCount}
+                  </span>
+                )}
               </button>
 
               <button

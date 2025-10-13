@@ -2,35 +2,26 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  MoreVertical,
-  Search,
-  Info,
-  Pin,
-  Users,
-  Settings,
-  User,
-  Circle
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Send,
+  Paperclip,
+  Smile,
+  MoreVertical,
+  Circle,
+  Minus,
+  Square,
+  User,
+  Info
+} from "lucide-react";
 import { MessageBubble, TypingIndicator } from "./message-bubble";
-import { ChatInput } from "./chat-input";
 import { FlexibleAvatar } from "@/components/ui/flexible-avatar";
 import { useUserBorder } from "@/hooks/useUserBorder";
 import { useSocket } from "@/hooks/useSocket";
-import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -69,44 +60,39 @@ interface Conversation {
   id: string;
   type: 'DIRECT' | 'GROUP';
   name?: string;
-  description?: string;
-  participantIds: string[];
   participants: Participant[];
-  isPinned: boolean;
-  isMuted: boolean;
-  createdAt: string;
 }
 
-interface ChatWindowProps {
+interface FloatingChatContentProps {
   conversation: Conversation;
-  onBack?: () => void;
-  onConversationInfo?: () => void;
+  onClose: () => void;
+  onMinimize: () => void;
+  isMaximized: boolean;
 }
 
-export function ChatWindow({
+export function FloatingChatContent({
   conversation,
-  onBack,
-  onConversationInfo
-}: ChatWindowProps) {
+  onClose,
+  onMinimize,
+  isMaximized
+}: FloatingChatContentProps) {
   const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<Participant[]>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [messageInput, setMessageInput] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Socket.io integration
   const { socket, isConnected, onNewMessage, onTypingIndicator, joinUser, joinConversation, leaveConversation, sendMessage, startTyping, stopTyping } = useSocket({
     autoConnect: true
-  });
-
-  // Chat notifications
-  useChatNotifications({
-    enabled: true,
-    showOnlyWhenInactive: true
   });
 
   const isOwnMessage = (senderId: string) => senderId === session?.user?.id;
@@ -192,6 +178,23 @@ export function ChatWindow({
     };
   }, [socket, isConnected, conversation.id, session, onNewMessage, onTypingIndicator]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showDropdown) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showDropdown]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -200,45 +203,6 @@ export function ChatWindow({
       }
     };
   }, [socket, conversation.id, leaveConversation]);
-
-  useEffect(() => {
-    // Set up WebSocket connection for real-time updates
-    const handleNewMessage = (event: MessageEvent) => {
-      const message = JSON.parse(event.data);
-      if (message.conversationId === conversation.id) {
-        setMessages(prev => [...prev, message]);
-        if (message.senderId !== session?.user?.id) {
-          markAsRead();
-        }
-      }
-    };
-
-    const handleTypingIndicator = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      if (data.conversationId === conversation.id && data.isTyping) {
-        setTypingUsers(prev => {
-          const existing = prev.find(u => u.id === data.userId);
-          if (!existing) {
-            const user = conversation.participants.find(p => p.id === data.userId);
-            if (user) {
-              return [...prev, user];
-            }
-          }
-          return prev;
-        });
-      } else {
-        setTypingUsers(prev => prev.filter(u => u.id !== data.userId));
-      }
-    };
-
-    // In a real implementation, you'd set up WebSocket listeners here
-    // For now, we'll simulate with polling
-    const interval = setInterval(() => {
-      // Simulate real-time updates
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [conversation.id, session?.user?.id]);
 
   const fetchMessages = async () => {
     try {
@@ -255,7 +219,7 @@ export function ChatWindow({
           replyToId: msg.reply_to,
           replyTo: msg.replyToUser ? {
             id: msg.replyToUser.id,
-            content: '', // Would need to fetch the original message
+            content: '',
             senderName: msg.replyToUser.name
           } : undefined,
           isEdited: msg.is_edited,
@@ -307,18 +271,18 @@ export function ChatWindow({
     }
   };
 
-  const handleSendMessage = async (content: string, type: 'TEXT' | 'IMAGE' | 'FILE', file?: File) => {
-    if (!session?.user?.id) return;
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !session?.user?.id) return;
+
+    const messageData = {
+      conversationId: conversation.id,
+      senderId: session.user.id,
+      content: messageInput.trim(),
+      type: 'TEXT' as const,
+      replyTo: replyingTo?.id
+    };
 
     try {
-      const messageData = {
-        conversationId: conversation.id,
-        senderId: session.user.id,
-        content,
-        type,
-        replyTo: replyingTo?.id
-      };
-
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: {
@@ -358,9 +322,10 @@ export function ChatWindow({
             senderId: session.user.id
           });
         }
-      }
 
-      setReplyingTo(null);
+        setMessageInput("");
+        setReplyingTo(null);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -380,24 +345,6 @@ export function ChatWindow({
         }
       });
     }
-
-    // Also send via API for persistence
-    try {
-      fetch('/api/chat/typing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          conversationId: conversation.id,
-          userId: session.user.id,
-          isTyping: true
-        })
-      });
-    } catch (error) {
-      console.error('Error sending typing indicator:', error);
-    }
   };
 
   const handleTypingStop = () => {
@@ -414,44 +361,11 @@ export function ChatWindow({
         }
       });
     }
-
-    // Also send via API for persistence
-    try {
-      fetch('/api/chat/typing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          conversationId: conversation.id,
-          userId: session.user.id,
-          isTyping: false
-        })
-      });
-    } catch (error) {
-      console.error('Error stopping typing indicator:', error);
-    }
   };
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
-  };
-
-  const handleEdit = (messageId: string) => {
-    // Implement message editing
-  };
-
-  const handleDelete = async (messageId: string) => {
-    try {
-      await fetch(`/api/chat/messages/${messageId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-    } catch (error) {
-      console.error('Error deleting message:', error);
-    }
+    inputRef.current?.focus();
   };
 
   const handleReaction = async (messageId: string, emoji: string) => {
@@ -462,15 +376,31 @@ export function ChatWindow({
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({ emoji })
+        body: JSON.stringify({
+          userId: session?.user?.id,
+          emoji
+        })
       });
 
       if (response.ok) {
         const updatedMessage = await response.json();
-        setMessages(prev => prev.map(m => m.id === messageId ? updatedMessage : m));
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: updatedMessage.data.reactions } : m));
       }
     } catch (error) {
       console.error('Error adding reaction:', error);
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageInput(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -526,177 +456,139 @@ export function ChatWindow({
     : session?.user?.id;
   const { border: userBorder } = useUserBorder(borderUserId);
 
+  // Get other participant for direct messages
+  const getOtherParticipant = () => {
+    if (conversation.type === 'DIRECT') {
+      return conversation.participants.find(p => p.id !== session?.user?.id);
+    }
+    return null;
+  };
+
+  const otherParticipant = getOtherParticipant();
+
   return (
-    <Card className="h-full flex flex-col">
-      {/* Chat Header */}
-      <CardHeader className="pb-3 border-b">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Back button for mobile */}
-            {onBack && (
-              <Button
-                variant="ghost"
+    <div className="flex flex-col h-full">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between p-3 border-b bg-gray-50">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {/* Avatar */}
+          <div className="relative">
+            {conversation.type === 'DIRECT' ? (
+              <FlexibleAvatar
+                src={avatarData.src}
+                name={avatarData.name}
+                userBorder={userBorder}
                 size="sm"
-                onClick={onBack}
-                className="md:hidden"
-              >
-                ←
-              </Button>
-            )}
-
-            {/* Avatar */}
-            <div className="relative">
-              {conversation.type === 'DIRECT' ? (
-                <FlexibleAvatar
-                  src={avatarData.src}
-                  name={avatarData.name}
-                  userBorder={userBorder}
-                  size="md"
-                />
-              ) : (
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-                  <Users className="w-5 h-5 text-white" />
-                </div>
-              )}
-            </div>
-
-            {/* Conversation info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-lg truncate">
-                  {getConversationName()}
-                </CardTitle>
-                {conversation.isPinned && (
-                  <Pin className="w-4 h-4 text-gray-400" />
-                )}
+              />
+            ) : (
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-medium">
+                  {conversation.name?.charAt(0) || 'G'}
+                </span>
               </div>
-              <p className="text-sm text-gray-600 truncate">
-                {getStatusText()}
-              </p>
-            </div>
+            )}
+            {/* Status indicator for direct messages */}
+            {conversation.type === 'DIRECT' && (() => {
+              const otherParticipant = conversation.participants.find(p => p.id !== session?.user?.id);
+              const isOnline = otherParticipant?.status === 'ONLINE';
+              return (
+                <div
+                  className={cn(
+                    "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white",
+                    isOnline ? "bg-green-500" : "bg-gray-400"
+                  )}
+                />
+              );
+            })()}
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <Search className="h-4 w-4" />
-            </Button>
-            {conversation.type === 'DIRECT' && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  {/* User Profile Section */}
-                  <DropdownMenuLabel className="flex items-center gap-3 p-4">
-                    <FlexibleAvatar
-                      src={avatarData.src}
-                      name={avatarData.name}
-                      userBorder={userBorder}
-                      size="lg"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{getConversationName()}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="flex items-center gap-1">
-                          <Circle className="h-2 w-2 fill-current text-green-500" />
-                          <span className="text-xs text-gray-500">{getStatusText()}</span>
-                        </div>
-                      </div>
-                      {userBorder && (
-                        <Badge variant="outline" className="mt-1 text-xs">
-                          {userBorder}
-                        </Badge>
-                      )}
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <a href={`/profile/${conversation.participants.find(p => p.id !== session?.user?.id)?.id}`} className="flex items-center cursor-pointer">
-                      <User className="h-4 w-4 mr-2" />
-                      View Profile
-                    </a>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onConversationInfo}>
-                    <Info className="h-4 w-4 mr-2" />
-                    Contact Info
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    {conversation.isPinned ? (
-                      <>
-                        <Pin className="h-4 w-4 mr-2" />
-                        Unpin Chat
-                      </>
-                    ) : (
-                      <>
-                        <Pin className="h-4 w-4 mr-2" />
-                        Pin Chat
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    {conversation.isMuted ? (
-                      <>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Unmute Notifications
-                      </>
-                    ) : (
-                      <>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Mute Notifications
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {conversation.type === 'GROUP' && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onConversationInfo}>
-                    <Info className="h-4 w-4 mr-2" />
-                    Group Info
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    {conversation.isPinned ? (
-                      <>
-                        <Pin className="h-4 w-4 mr-2" />
-                        Unpin Chat
-                      </>
-                    ) : (
-                      <>
-                        <Pin className="h-4 w-4 mr-2" />
-                        Pin Chat
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    {conversation.isMuted ? (
-                      <>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Unmute Notifications
-                      </>
-                    ) : (
-                      <>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Mute Notifications
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+          {/* Conversation info */}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm truncate">
+              {getConversationName()}
+            </h3>
+            <p className="text-xs text-gray-600 truncate">
+              {getStatusText()}
+            </p>
           </div>
         </div>
-      </CardHeader>
+
+        {/* Window Controls */}
+        <div className="flex items-center gap-1 relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 hover:bg-gray-200"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDropdown(!showDropdown);
+            }}
+          >
+            <MoreVertical className="h-3 w-3" />
+          </Button>
+
+          {/* Custom Dropdown */}
+          {showDropdown && (
+            <div
+              className="absolute right-0 top-8 bg-white border border-gray-200 rounded-md shadow-lg w-64 z-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="relative bg-white rounded-md">
+                {/* View Profile */}
+                {conversation.type === 'DIRECT' && (
+                  <a
+                    href={`/profile/${otherParticipant?.id}`}
+                    className="flex items-center px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer rounded-t-md"
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    View Profile
+                  </a>
+                )}
+
+                {/* Contact Info */}
+                <button
+                  className="flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 text-left"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    // TODO: Show contact info modal
+                  }}
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  Contact Info
+                </button>
+
+                {/* Separator */}
+                <div className="border-t border-gray-200" />
+
+                {/* Minimize */}
+                <button
+                  className="flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 text-left"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    onMinimize();
+                  }}
+                >
+                  <Minus className="h-4 w-4 mr-2" />
+                  Minimize
+                </button>
+
+                {/* Mute Notifications */}
+                <button
+                  className="flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 text-left rounded-b-md"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    // TODO: Toggle mute notifications
+                  }}
+                >
+                  <Circle className="h-4 w-4 mr-2" />
+                  Mute Notifications
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Messages Area */}
       <CardContent className="flex-1 p-0 overflow-hidden">
@@ -705,10 +597,10 @@ export function ChatWindow({
           className="h-full"
           onScroll={handleScroll}
         >
-          <div className="p-3 space-y-1">
+          <div className="p-3 space-y-2">
             {loading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
               </div>
             ) : (
               <>
@@ -722,8 +614,6 @@ export function ChatWindow({
                       isOwn={isOwnMessage(message.senderId)}
                       isGroup={isGroup}
                       onReply={handleReply}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
                       onReaction={handleReaction}
                     />
                   );
@@ -743,16 +633,91 @@ export function ChatWindow({
       </CardContent>
 
       {/* Chat Input */}
-      <div className="p-2 border-t">
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          onTypingStart={handleTypingStart}
-          onTypingStop={handleTypingStop}
-          replyTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          disabled={loading}
-        />
+      <div className="p-3 border-t bg-white">
+        {/* Reply preview */}
+        {replyingTo && (
+          <div className="mb-2 p-2 bg-blue-50 border-l-2 border-blue-300 rounded text-xs">
+            <div className="flex items-center justify-between">
+              <div className="text-blue-600 font-medium">
+                Replying to {replyingTo.senderId === session?.user?.id ? 'yourself' : 'other person'}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-4 w-4 p-0"
+                onClick={() => setReplyingTo(null)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="text-gray-700 truncate mt-1">
+              {replyingTo.content}
+            </div>
+          </div>
+        )}
+
+        {/* Input area */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
+            title="Attach file"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+
+          <div className="relative flex-1">
+            <Input
+              ref={inputRef}
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              onFocus={handleTypingStart}
+              onBlur={handleTypingStop}
+              placeholder="Type a message..."
+              className="pr-10"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              title="Add emoji"
+            >
+              <Smile className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <Button
+            onClick={handleSendMessage}
+            disabled={!messageInput.trim()}
+            size="sm"
+            className="h-8 px-3"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Simple Emoji Picker */}
+        {showEmojiPicker && (
+          <div className="absolute bottom-20 right-3 z-50 bg-white border rounded-lg shadow-lg p-2">
+            <div className="grid grid-cols-6 gap-1">
+              {['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '❤️', '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '👏'].map((emoji) => (
+                <button
+                  key={emoji}
+                  className="w-8 h-8 rounded hover:bg-gray-100 text-sm flex items-center justify-center"
+                  onClick={() => handleEmojiSelect(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-    </Card>
+    </div>
   );
 }
+
+export default FloatingChatContent;

@@ -5,8 +5,14 @@ const dbConfig = {
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'hikariCha_db'
+  database: 'hikariCha_db',
+  connectionLimit: 10,
+  acquireTimeout: 60000,
+  timeout: 60000,
 }
+
+// Create connection pool
+const pool = mysql.createPool(dbConfig)
 
 export async function POST(request: NextRequest) {
   let connection
@@ -14,14 +20,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { conversationId, userId, isTyping = true } = body
 
-    if (!conversationId || !userId) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Conversation ID and user ID are required' },
+        { success: false, error: 'User ID is required' },
         { status: 400 }
       )
     }
 
-    connection = await mysql.createConnection(dbConfig)
+    connection = await pool.getConnection()
 
     // Verify user is participant in conversation
     const [participantCheck] = await connection.execute(`
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
     )
   } finally {
     if (connection) {
-      await connection.end()
+      connection.release()
     }
   }
 }
@@ -99,7 +105,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    connection = await mysql.createConnection(dbConfig)
+    connection = await pool.getConnection()
 
     // Get active typing indicators for this conversation
     let query = `
@@ -144,7 +150,7 @@ export async function GET(request: NextRequest) {
     )
   } finally {
     if (connection) {
-      await connection.end()
+      connection.release()
     }
   }
 }
@@ -153,7 +159,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   let connection
   try {
-    connection = await mysql.createConnection(dbConfig)
+    connection = await pool.getConnection()
 
     // Delete typing indicators older than 1 minute or that haven't been updated recently
     await connection.execute(`
@@ -174,7 +180,7 @@ export async function DELETE(request: NextRequest) {
     )
   } finally {
     if (connection) {
-      await connection.end()
+      connection.release()
     }
   }
 }

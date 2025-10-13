@@ -5,8 +5,14 @@ const dbConfig = {
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'hikariCha_db'
+  database: 'hikariCha_db',
+  connectionLimit: 10,
+  acquireTimeout: 60000,
+  timeout: 60000,
 };
+
+// Create connection pool
+const pool = mysql.createPool(dbConfig);
 
 export async function POST(
   request: NextRequest,
@@ -26,7 +32,7 @@ export async function POST(
       );
     }
 
-    connection = await mysql.createConnection(dbConfig);
+    connection = await pool.getConnection();
 
     // Update the last_read_at timestamp for the participant
     await connection.execute(`
@@ -55,7 +61,7 @@ export async function POST(
     );
   } finally {
     if (connection) {
-      await connection.end();
+      connection.release();
     }
   }
 }

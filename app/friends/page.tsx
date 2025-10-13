@@ -21,7 +21,7 @@ interface User {
   image?: string
   customStatus?: string
   friendCount: number
-  userstatus?: {
+  userStatus?: {
     status: 'ONLINE' | 'AWAY' | 'BUSY' | 'OFFLINE';
     lastSeen: string;
   };
@@ -113,17 +113,81 @@ export default function FriendsPage() {
 
       if (friendsRes.ok) {
         const friendsData = await friendsRes.json()
-        setFriends(friendsData.friends || [])
+        // Transform API response to match Friend interface
+        const transformedFriends = (friendsData.friends || []).map((friend: any) => ({
+          id: friend.id,
+          friend: {
+            id: friend.id,
+            name: friend.name,
+            email: friend.email,
+            image: friend.image,
+            customStatus: friend.customStatus,
+            userStatus: {
+              status: friend.status || 'OFFLINE',
+              lastSeen: friend.lastSeen
+            }
+          },
+          createdAt: friend.createdAt
+        }))
+        setFriends(transformedFriends)
       }
 
       if (sentRes.ok) {
         const sentData = await sentRes.json()
-        setSentRequests(sentData.requests || [])
+        // Transform API response to match FriendRequest interface
+        const transformedSent = (sentData.requests || []).map((request: any) => ({
+          id: request.id,
+          sender: {
+            id: session.user.id,
+            name: session.user.name || 'You',
+            email: session.user.email || '',
+            image: session.user.image,
+            customStatus: '',
+            userStatus: { status: 'ONLINE' as const, lastSeen: new Date().toISOString() }
+          },
+          receiver: {
+            id: request.receiver.id,
+            name: request.receiver.name,
+            email: request.receiver.email,
+            image: request.receiver.image,
+            customStatus: request.receiver.customStatus,
+            userStatus: {
+              status: request.receiver.userstatus?.status || 'OFFLINE',
+              lastSeen: request.receiver.userstatus?.lastSeen
+            }
+          },
+          createdAt: request.createdAt
+        }))
+        setSentRequests(transformedSent)
       }
 
       if (receivedRes.ok) {
         const receivedData = await receivedRes.json()
-        setReceivedRequests(receivedData.requests || [])
+        // Transform API response to match FriendRequest interface
+        const transformedReceived = (receivedData.requests || []).map((request: any) => ({
+          id: request.id,
+          sender: {
+            id: request.sender.id,
+            name: request.sender.name,
+            email: request.sender.email,
+            image: request.sender.image,
+            customStatus: request.sender.customStatus,
+            userStatus: {
+              status: request.sender.userstatus?.status || 'OFFLINE',
+              lastSeen: request.sender.userstatus?.lastSeen
+            }
+          },
+          receiver: {
+            id: session.user.id,
+            name: session.user.name || 'You',
+            email: session.user.email || '',
+            image: session.user.image,
+            customStatus: '',
+            userStatus: { status: 'ONLINE' as const, lastSeen: new Date().toISOString() }
+          },
+          createdAt: request.createdAt
+        }))
+        setReceivedRequests(transformedReceived)
 
         // Check if there are received requests to show notification
         if (receivedData.requests && receivedData.requests.length > 0) {
@@ -270,7 +334,26 @@ export default function FriendsPage() {
   }
 
   const handleStartChat = (friendId: string) => {
-    toast.info('Chat feature coming soon!')
+    // Find the friend from friends list
+    const friend = friends.find(f => f.friend.id === friendId);
+    if (friend && session?.user?.id) {
+      // Create conversation data
+      const conversation = {
+        id: `direct_${friendId}`, // Temporary ID
+        type: 'DIRECT' as const,
+        name: friend.friend.name,
+        participants: [
+          { id: session.user.id, name: session.user.name || 'You' },
+          { id: friend.friend.id, name: friend.friend.name, image: friend.friend.image }
+        ]
+      };
+
+      // Open chat through window (requires chat system to be available)
+      // For now, redirect to chat page with conversation info
+      window.open(`/chat?friend=${friendId}`, '_blank');
+    } else {
+      toast.error('Unable to start chat');
+    }
   }
 
   const handleFollowChange = (userId: string, isFollowing: boolean) => {
@@ -289,17 +372,39 @@ export default function FriendsPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Tidak diketahui";
 
-    if (diffDays === 0) return "Hari ini"
-    if (diffDays === 1) return "Kemarin"
-    if (diffDays < 7) return `${diffDays} hari lalu`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`
-    return `${Math.floor(diffDays / 30)} bulan lalu`
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+
+      // Check if date is invalid
+      if (isNaN(date.getTime())) return "Tanggal tidak valid";
+
+      const diffMs = now.getTime() - date.getTime();
+
+      // If date is in future
+      if (diffMs < 0) return "Baru saja";
+
+      const diffInSeconds = Math.floor(diffMs / 1000);
+      const diffInMinutes = Math.floor(diffInSeconds / 60);
+      const diffInHours = Math.floor(diffInMinutes / 60);
+      const diffInDays = Math.floor(diffInHours / 24);
+
+      if (diffInSeconds < 30) return "Baru saja";
+      if (diffInSeconds < 60) return "30 detik lalu";
+      if (diffInMinutes < 60) return `${diffInMinutes} menit lalu`;
+      if (diffInHours < 24) return `${diffInHours} jam lalu`;
+      if (diffInDays === 1) return "Kemarin";
+      if (diffInDays < 7) return `${diffInDays} hari lalu`;
+      if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} minggu lalu`;
+      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} bulan lalu`;
+
+      return `${Math.floor(diffInDays / 365)} tahun lalu`;
+    } catch (error) {
+      return "Format tanggal error";
+    }
   }
 
   // Show loading spinner while session is loading

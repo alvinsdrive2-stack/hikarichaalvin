@@ -52,7 +52,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-const getStatusText = (status: string, lastSeen: string) => {
+const getStatusText = (status: string, lastSeen?: string) => {
   switch (status) {
     case 'ONLINE':
       return 'Online';
@@ -61,14 +61,65 @@ const getStatusText = (status: string, lastSeen: string) => {
     case 'BUSY':
       return 'Busy';
     default:
-      const lastSeenDate = new Date(lastSeen);
-      const now = new Date();
-      const diffInMinutes = Math.floor((now.getTime() - lastSeenDate.getTime()) / (1000 * 60));
+      // Handle missing or invalid lastSeen
+      if (!lastSeen) return 'Offline';
 
-      if (diffInMinutes < 1) return 'Just now';
-      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-      return `${Math.floor(diffInMinutes / 1440)}d ago`;
+      try {
+        const lastSeenDate = new Date(lastSeen);
+        const now = new Date();
+
+        // Check if date is invalid
+        if (isNaN(lastSeenDate.getTime())) return 'Offline';
+
+        const diffInMs = now.getTime() - lastSeenDate.getTime();
+
+        // If date is in future, show as offline
+        if (diffInMs < 0) return 'Offline';
+
+        const diffInSeconds = Math.floor(diffInMs / 1000);
+        const diffInMinutes = Math.floor(diffInSeconds / 60);
+        const diffInHours = Math.floor(diffInMinutes / 60);
+
+        if (diffInSeconds < 30) return 'Just now';
+        if (diffInSeconds < 60) return '30s ago';
+        if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+        if (diffInHours < 24) return `${diffInHours}h ago`;
+
+        return `${Math.floor(diffInHours / 24)}d ago`;
+      } catch (error) {
+        return 'Offline';
+      }
+  }
+};
+
+const formatRequestTime = (dateString: string) => {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+
+    // Check if date is invalid
+    if (isNaN(date.getTime())) return 'Invalid date';
+
+    const diffInMs = now.getTime() - date.getTime();
+
+    // If date is in future
+    if (diffInMs < 0) return 'Just now';
+
+    const diffInSeconds = Math.floor(diffInMs / 1000);
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    const diffInHours = Math.floor(diffInMinutes / 60);
+
+    if (diffInSeconds < 30) return 'Just now';
+    if (diffInSeconds < 60) return '30s ago';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    return 'Date error';
   }
 };
 
@@ -195,7 +246,7 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
               <Clock className="h-3 w-3 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 {type === 'received' ? 'Received' : 'Sent'}{' '}
-                {new Date(request.createdAt).toLocaleDateString()}
+                {formatRequestTime(request.createdAt)}
               </span>
               {user.userStatus && user.userStatus.status !== 'ONLINE' && (
                 <span className="text-xs text-muted-foreground">
